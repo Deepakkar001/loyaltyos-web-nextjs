@@ -1,0 +1,68 @@
+/* Scoped to onboarding wizard main column only (imported by OnboardingShell). */
+.mainSurface {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.32 0 0);
+  --input: oklch(0.32 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  --surface-page: #f8f7f4;
+  --surface-card: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f1eff8;
+  --accent-primary: #5b4fe8;
+  --accent-primary-soft: #eef0ff;
+  --status-positive: #16a34a;
+  --status-positive-bg: #f0fdf4;
+  --status-warning: #d97706;
+  --status-warning-bg: #fffbeb;
+  --status-critical: #dc2626;
+  --status-critical-bg: #fef2f2;
+  --status-neutral: #6b7280;
+  --status-neutral-bg: #f9fafb;
+  --chart-primary: #5b4fe8;
+  --chart-secondary: #10b981;
+  --chart-tertiary: #f59e0b;
+  --chart-quaternary: #ef4444;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-raised: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.06);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+/* Keep onboarding placeholders readable (slate-grey) regardless of global theme. */
+.mainSurface :global([data-slot="input"]::placeholder) {
+  color: #64748b; /* slate-500 */
+  opacity: 1;
+}
+
+.mainSurface :global([data-slot="input"]:disabled::placeholder) {
+  color: #94a3b8; /* slate-400 */
+}
