@@ -181,7 +181,26 @@ export class RuleTreeBuilder {
     });
 
     // If any empty conjunction exists, the OR is always true => everyone.
-    if (ordered.some(([, conj]) => conj.length === 0)) return { tree: { kind: "everyone" }, errors: allErrors };
+    // This is almost always a wiring mistake (e.g. Event still connects to Award,
+    // or a Logic OR merges a "no filter" branch with a real branch into Award).
+    // Surface as a blocking error so the badge is not green and Next explains why.
+    if (ordered.some(([, conj]) => conj.length === 0)) {
+      return {
+        tree: { kind: "everyone" },
+        errors: [
+          ...allErrors,
+          {
+            id: "unfiltered_path_to_award",
+            nodeId: "event",
+            severity: "error",
+            message:
+              "Every event would earn points: at least one path reaches Award Points without passing through any condition.",
+            suggestedFix:
+              "Remove any arrow from Event straight to Award. If you use Logic (OR), ensure no branch skips all conditions. The \"no\" side of a filter should usually go to \"no action\", not to the same Award as \"yes\".",
+          },
+        ],
+      };
+    }
 
     const rootId = stableIdFromPath(["root"]);
     const root = group("OR", disjuncts, rootId);

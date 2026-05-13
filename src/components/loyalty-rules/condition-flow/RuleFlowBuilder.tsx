@@ -82,6 +82,8 @@ export interface RuleFlowBuilderHandle {
     hasConditionNodes: boolean;
     /** True when the treeBuilder or validators produced blocking errors. */
     hasErrors: boolean;
+    /** First blocking error — for toast text when Next is pressed. */
+    firstErrorMessage?: string;
   };
 }
 
@@ -139,12 +141,20 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
       const all = [...graphErrors, ...nodeErrors];
       const hasGraphErrors = all.some((e) => e.severity === "error");
       if (hasGraphErrors) {
-        return { tree: { kind: "everyone" } as ConditionTreeDraft, hasConditionNodes, hasErrors: true };
+        const firstErrorMessage = all.find((e) => e.severity === "error")?.message;
+        return {
+          tree: { kind: "everyone" } as ConditionTreeDraft,
+          hasConditionNodes,
+          hasErrors: true,
+          firstErrorMessage,
+        };
       }
       const builder = new RuleTreeBuilder();
       const built = builder.buildTree(ns, es);
-      const hasErrors = built.errors.some((e) => e.severity === "error");
-      return { tree: built.tree, hasConditionNodes, hasErrors };
+      const blocking = built.errors.filter((e) => e.severity === "error");
+      const hasErrors = blocking.length > 0;
+      const firstErrorMessage = blocking[0]?.message;
+      return { tree: built.tree, hasConditionNodes, hasErrors, firstErrorMessage };
     },
   }), [nodes, edges]);
 
