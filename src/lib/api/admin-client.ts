@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosResponse } from "axios";
 import {
+  AdminBusinessCategoryItem,
   AdminDashboardStats,
   AdminLoginResponse,
   AdminTenantDetail,
@@ -7,6 +8,7 @@ import {
   AllAgreementItem,
   ApiErrorResponse,
   AuditLogItem,
+  BusinessCategoryStatus,
   PendingAgreementListItem,
 } from "@/types/onboarding";
 
@@ -158,6 +160,85 @@ export const adminApi = {
     try {
       const res: AxiosResponse<AllAgreementItem[]> = await adminClient.get(
         "/api/v1/admin/dashboard/agreements/all"
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  // Industry suggestion moderation ────────────────────────────────────────────
+  listBusinessCategories: async (
+    status?: BusinessCategoryStatus | "ALL"
+  ): Promise<AdminBusinessCategoryItem[]> => {
+    try {
+      const qs =
+        !status || status === "ALL"
+          ? ""
+          : `?status=${encodeURIComponent(status)}`;
+      const res: AxiosResponse<AdminBusinessCategoryItem[]> = await adminClient.get(
+        `/api/v1/admin/business-categories${qs}`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  approveBusinessCategory: async (
+    code: string,
+    overrides?: { label?: string; sortOrder?: number }
+  ): Promise<AdminBusinessCategoryItem> => {
+    try {
+      const res: AxiosResponse<AdminBusinessCategoryItem> = await adminClient.post(
+        `/api/v1/admin/business-categories/${encodeURIComponent(code)}/approve`,
+        {
+          label: overrides?.label ?? null,
+          sortOrder: overrides?.sortOrder ?? null,
+        }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  rejectBusinessCategory: async (
+    code: string,
+    reason: string
+  ): Promise<AdminBusinessCategoryItem> => {
+    try {
+      const res: AxiosResponse<AdminBusinessCategoryItem> = await adminClient.post(
+        `/api/v1/admin/business-categories/${encodeURIComponent(code)}/reject`,
+        { reason }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  deactivateBusinessCategory: async (
+    code: string,
+    reason?: string
+  ): Promise<AdminBusinessCategoryItem> => {
+    try {
+      const res: AxiosResponse<AdminBusinessCategoryItem> = await adminClient.post(
+        `/api/v1/admin/business-categories/${encodeURIComponent(code)}/deactivate`,
+        { reason: reason?.trim() || null }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  reactivateBusinessCategory: async (
+    code: string
+  ): Promise<AdminBusinessCategoryItem> => {
+    try {
+      const res: AxiosResponse<AdminBusinessCategoryItem> = await adminClient.post(
+        `/api/v1/admin/business-categories/${encodeURIComponent(code)}/reactivate`
       );
       return res.data;
     } catch (err) {

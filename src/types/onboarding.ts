@@ -22,6 +22,7 @@ export type OnboardingStatus =
   | "AGREEMENT_PENDING"
   | "AGREEMENT_SIGNED"
   | "CONFIGURED"
+  | "RULES_CONFIGURED"
   | "SANDBOX_TESTING"
   | "ACTIVE"
   | "SUSPENDED"
@@ -135,6 +136,30 @@ export interface WebhookConfigInput {
   productionEndpointUrl?: string;
 }
 
+// ─── v2 Programme APIs ────────────────────────────────────────────────────────
+
+export interface CreateProgrammeRequest {
+  name: string;
+}
+
+export interface ProgrammeSummaryResponse {
+  programmeUid: string;
+  name: string;
+  status: string;
+  activeConfigVersion: number;
+}
+
+export interface UpsertProgrammeConfigRequest {
+  config: unknown;
+}
+
+export interface ProgrammeConfigBlobResponse {
+  tenantId: string;
+  programmeUid: string;
+  configVersion: number;
+  config: unknown;
+}
+
 // ─── API Response Types ───────────────────────────────────────────────────────
 
 export interface TenantRegistrationResponse {
@@ -162,6 +187,12 @@ export interface TenantStatusResponse {
   createdAt: string;
   activatedAt: string | null;
   businessCategory?: string;
+  /** Human-readable label of the resolved category. */
+  businessCategoryLabel?: string | null;
+  /** Moderation status: APPROVED / PENDING_REVIEW / REJECTED. */
+  businessCategoryStatus?: BusinessCategoryStatus | null;
+  /** Reason text when status is REJECTED. */
+  businessCategoryDecisionReason?: string | null;
   countryCode?: string;
   websiteUrl?: string | null;
   timezone?: string;
@@ -180,6 +211,25 @@ export interface TenantStatusResponse {
   annualRevenueRange?: string | null;
   customerBaseSize?: number | null;
   paymentMethodsAccepted?: string | null;
+}
+
+// ─── Industry Moderation ──────────────────────────────────────────────────────
+
+export type BusinessCategoryStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
+export interface AdminBusinessCategoryItem {
+  code: string;
+  label: string;
+  submittedLabel?: string | null;
+  sortOrder?: number | null;
+  active?: boolean;
+  status: BusinessCategoryStatus;
+  submittedByTenantId?: string | null;
+  submittedByCompanyName?: string | null;
+  submittedByEmail?: string | null;
+  decisionReason?: string | null;
+  decidedByAdminId?: string | null;
+  decidedAt?: string | null;
 }
 
 // ─── Admin Types ───────────────────────────────────────────────────────────────
@@ -428,6 +478,7 @@ export const STATUS_TO_STEP: Record<OnboardingStatus, WizardStep> = {
   AGREEMENT_PENDING: "agreement",
   AGREEMENT_SIGNED: "agreement",
   CONFIGURED: "programme",
+  RULES_CONFIGURED: "integration",
   SANDBOX_TESTING: "integration",
   ACTIVE: "complete",
   SUSPENDED: "complete",

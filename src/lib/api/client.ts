@@ -5,6 +5,10 @@ import {
   LoginResponse,
   OnboardingMetadataResponse,
   ProgrammeConfigRequest,
+  CreateProgrammeRequest,
+  ProgrammeSummaryResponse,
+  ProgrammeConfigBlobResponse,
+  UpsertProgrammeConfigRequest,
   RegisterTenantRequest,
   SubmitAgreementRequest,
   TenantRegistrationResponse,
@@ -12,6 +16,7 @@ import {
 } from "@/types/onboarding";
 import { getAccessToken, setAccessToken as setSessionAccessToken, clearSession } from "@/lib/auth/session";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { EarnRuleDetailResponse, EarnRuleResponse, RuleChangeLogResponse, RuleStatus, RuleUpsertRequest } from "@/types/rules";
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
@@ -290,6 +295,224 @@ export const onboardingApi = {
         `/api/v1/onboarding/${tenantId}/keys/sandbox`
       );
       return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  /** Setup Progress — mark rules complete */
+  completeRulesSetup: async (): Promise<void> => {
+    try {
+      await apiClient.post("/api/v1/me/setup/rules/complete", {});
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+// ─── New dashboard APIs (Steps 4–6) ───────────────────────────────────────────
+
+export const tenantConfigApi = {
+  getMyConfig: async () => {
+    try {
+      const res = await apiClient.get("/api/v1/me/config");
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  saveMyConfig: async (data: ProgrammeConfigRequest) => {
+    try {
+      const res = await apiClient.post("/api/v1/me/config", data);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+export const programmeApiV2 = {
+  listProgrammes: async (): Promise<ProgrammeSummaryResponse[]> => {
+    try {
+      const res = await apiClient.get<ProgrammeSummaryResponse[]>("/api/v2/programmes");
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  createProgramme: async (data: CreateProgrammeRequest): Promise<ProgrammeSummaryResponse> => {
+    try {
+      const res = await apiClient.post<ProgrammeSummaryResponse>("/api/v2/programmes", data);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getProgrammeConfig: async (programmeUid: string): Promise<ProgrammeConfigBlobResponse> => {
+    try {
+      const res = await apiClient.get<ProgrammeConfigBlobResponse>(`/api/v2/programmes/${programmeUid}/config`);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  upsertProgrammeConfig: async (
+    programmeUid: string,
+    data: UpsertProgrammeConfigRequest
+  ): Promise<ProgrammeConfigBlobResponse> => {
+    try {
+      const res = await apiClient.put<ProgrammeConfigBlobResponse>(
+        `/api/v2/programmes/${programmeUid}/config`,
+        data
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+export const integrationApi = {
+  generateSandboxCredentials: async () => {
+    try {
+      const res: AxiosResponse<ApiKeyGeneratedResponse> = await apiClient.post(
+        "/api/v1/me/integration/credentials/SANDBOX"
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  generateProductionCredentials: async () => {
+    try {
+      const res: AxiosResponse<ApiKeyGeneratedResponse> = await apiClient.post(
+        "/api/v1/me/integration/credentials/PRODUCTION"
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getCredentialSummaries: async () => {
+    try {
+      const res = await apiClient.get("/api/v1/me/integration/credentials");
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  verifyWebhook: async () => {
+    try {
+      const res = await apiClient.post("/api/v1/me/integration/webhook/verify", {});
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getWebhookStatus: async () => {
+    try {
+      const res = await apiClient.get("/api/v1/me/integration/webhook/status");
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  validateSandboxEvent: async (payloadJson: string, ruleUid?: string) => {
+    try {
+      const res = await apiClient.post("/api/v1/me/integration/sandbox/validate-event", { payloadJson, ruleUid });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+export const goLiveApi = {
+  getChecklist: async () => {
+    try {
+      const res = await apiClient.get("/api/v1/me/go-live/checklist");
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  activate: async () => {
+    try {
+      const res = await apiClient.post("/api/v1/me/go-live/activate", {});
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+// ─── Rule Engine (tenant admin) ───────────────────────────────────────────────
+
+export const loyaltyRulesAdminApi = {
+  listRules: async (programmeUid = "default"): Promise<EarnRuleResponse[]> => {
+    try {
+      const res = await apiClient.get<EarnRuleResponse[]>("/api/v1/engine/rule/admin/rules", { params: { programmeUid } });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getRule: async (ruleUid: string, programmeUid = "default"): Promise<EarnRuleDetailResponse> => {
+    try {
+      const res = await apiClient.get<EarnRuleDetailResponse>(`/api/v1/engine/rule/admin/rules/${encodeURIComponent(ruleUid)}`, {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getChangeHistory: async (ruleUid: string, programmeUid = "default"): Promise<RuleChangeLogResponse[]> => {
+    try {
+      const res = await apiClient.get<RuleChangeLogResponse[]>(
+        `/api/v1/engine/rule/admin/rules/${encodeURIComponent(ruleUid)}/change-history`,
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  createRule: async (payload: RuleUpsertRequest): Promise<EarnRuleResponse> => {
+    try {
+      const res = await apiClient.post<EarnRuleResponse>("/api/v1/engine/rule/admin/rules", payload);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  updateRule: async (ruleUid: string, programmeUid: string, payload: RuleUpsertRequest): Promise<EarnRuleResponse> => {
+    try {
+      const res = await apiClient.put<EarnRuleResponse>(`/api/v1/engine/rule/admin/rules/${encodeURIComponent(ruleUid)}`, payload, {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  patchStatus: async (ruleUid: string, programmeUid: string, status: RuleStatus): Promise<EarnRuleResponse> => {
+    try {
+      const res = await apiClient.patch<EarnRuleResponse>(
+        `/api/v1/engine/rule/admin/rules/${encodeURIComponent(ruleUid)}/status`,
+        { status },
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  archiveRule: async (ruleUid: string, programmeUid: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/api/v1/engine/rule/admin/rules/${encodeURIComponent(ruleUid)}`, {
+        params: { programmeUid },
+      });
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);
     }

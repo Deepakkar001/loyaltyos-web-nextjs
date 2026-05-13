@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "LoyaltyOS — Business Portal",
-  description: "Launch your loyalty program in hours, not months.",
+  title: "LoyaltyOS — Guided loyalty programmes",
+  description:
+    "Enterprise-grade loyalty with honest 4–6 week launches, API-guided integrations, transparent setup hours, and dashboards leadership trusts.",
   icons: { icon: "/favicon.ico" },
 };
 
@@ -18,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>

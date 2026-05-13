@@ -17,6 +17,7 @@ export default function OnboardingPage() {
     currentStep,
     displayStep,
     accessToken,
+    onboardingStatus,
     syncStatusFromBackend,
     setDisplayStep,
   } = useOnboardingStore();
@@ -24,6 +25,7 @@ export default function OnboardingPage() {
   const [hydrated, setHydrated] = useState(false);
   const [allowResubmit, setAllowResubmit] = useState(false);
   const [refreshTried, setRefreshTried] = useState(false);
+  const [statusChecked, setStatusChecked] = useState(false);
 
   useEffect(() => {
     const unsub = useOnboardingStore.persist.onFinishHydration(() => {
@@ -54,14 +56,16 @@ export default function OnboardingPage() {
         const s = await onboardingApi.getMyStatus();
         if (!mounted) return;
         syncStatusFromBackend(s.onboardingStatus);
+        setStatusChecked(true);
 
         if (s.latestAgreementStatus === "REJECTED") {
           setAllowResubmit(true);
         } else if (s.latestAgreementStatus) {
-          router.replace("/dashboard");
+          router.replace("/dashboard/configure");
         }
       } catch {
         // If status fails, keep onboarding accessible.
+        setStatusChecked(true);
       }
     })();
     return () => { mounted = false; };
@@ -73,9 +77,21 @@ export default function OnboardingPage() {
       currentStep === "integration" ||
       currentStep === "complete"
     ) {
-      router.replace("/dashboard");
+      router.replace("/dashboard/configure");
     }
   }, [currentStep, router]);
+
+  // If the backend says the agreement is already signed (and not rejected),
+  // do not render onboarding step 3 even briefly.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!accessToken) return;
+    if (!statusChecked) return;
+    if (allowResubmit) return;
+    if (onboardingStatus === "AGREEMENT_SIGNED") {
+      router.replace("/dashboard/configure");
+    }
+  }, [hydrated, accessToken, statusChecked, allowResubmit, onboardingStatus, router]);
 
   const goToStep = useCallback(
     (step: WizardStep) => {
@@ -143,6 +159,15 @@ export default function OnboardingPage() {
       />
     ),
   };
+
+  // While we are determining the latest status, avoid flashing an outdated step.
+  if (hydrated && accessToken && !statusChecked) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <OnboardingShell

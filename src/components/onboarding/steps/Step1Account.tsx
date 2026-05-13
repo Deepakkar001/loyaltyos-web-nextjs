@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FieldValues, UseFormReturn } from "react-hook-form";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,7 +11,11 @@ import { StepHeader } from "../StepHeader";
 import { StepActions } from "../StepActions";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { onboardingApi, ApiError } from "@/lib/api/client";
-import { OnboardingSelectOption, RegisterTenantRequest } from "@/types/onboarding";
+import {
+  BusinessCategoryStatus,
+  OnboardingSelectOption,
+  RegisterTenantRequest,
+} from "@/types/onboarding";
 import toast from "react-hot-toast";
 import { Dropdown } from "@/components/common/Dropdown";
 import {
@@ -115,6 +119,13 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
   const [resendSubmitting, setResendSubmitting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
+  // Moderation state for the tenant's resolved industry — only meaningful in edit mode
+  // after the profile has loaded. Stays null when status is APPROVED.
+  const [industryModeration, setIndustryModeration] = useState<{
+    status: BusinessCategoryStatus;
+    label: string;
+    reason?: string | null;
+  } | null>(null);
 
   const registerForm = useForm<RegisterFormData>({ resolver: zodResolver(registerSchema) });
   const editForm = useForm<EditFormData>({ resolver: zodResolver(editSchema) });
@@ -123,6 +134,15 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
 
   const timezoneValue = watch("timezone", "");
   const selectedCategory = watch("businessCategory", "");
+
+  // Render order in the dropdown: all admin-approved DB industries first, then the
+  // "Other" escape-hatch pinned to the bottom. Sort is stable so the metadata's
+  // existing sort_order/label order is preserved.
+  const orderedIndustryOptions = useMemo(() => {
+    const dbItems = industryOptions.filter((c) => c.value !== "OTHER");
+    const otherItem = industryOptions.find((c) => c.value === "OTHER");
+    return otherItem ? [...dbItems, otherItem] : dbItems;
+  }, [industryOptions]);
 
   useEffect(() => {
     let mounted = true;
@@ -178,6 +198,18 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
           primaryContactPhone: s.primaryContactPhone ?? "",
           primaryContactDesignation: s.primaryContactDesignation ?? "",
         });
+        if (
+          s.businessCategoryStatus &&
+          s.businessCategoryStatus !== "APPROVED"
+        ) {
+          setIndustryModeration({
+            status: s.businessCategoryStatus,
+            label: s.businessCategoryLabel ?? s.businessCategory ?? "",
+            reason: s.businessCategoryDecisionReason ?? null,
+          });
+        } else {
+          setIndustryModeration(null);
+        }
       } catch {
         toast.error("Could not load current profile data.");
       } finally {
@@ -243,6 +275,13 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
       setVerifyCode("");
       setVerifyOpen(true);
       toast.success("Account created! We emailed you a 6-digit verification code.");
+      if (data.businessCategory === "OTHER" && data.customBusinessCategory) {
+        toast(
+          "Your industry suggestion has been submitted for admin review. " +
+            "It will appear in the public industry list once approved.",
+          { duration: 6000, icon: "🛂" }
+        );
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.fieldErrors) {
@@ -386,7 +425,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Industry" htmlFor="businessCategory" error={errors.businessCategory?.message as string} required>
               <Controller control={control} name="businessCategory" render={({ field }) => (
-                <Dropdown id="businessCategory" value={field.value} onChange={(v) => { field.onChange(v); if (v !== "OTHER") setValue("customBusinessCategory", ""); }} onBlur={field.onBlur} disabled={metadataLoading || industryOptions.length === 0} placeholder={metadataLoading ? "Loading..." : "Select industry"} options={industryOptions.map((c) => ({ value: c.value, label: (INDUSTRY_EMOJI[c.value] ?? "🏢") + "  " + c.label }))} aria-invalid={!!errors.businessCategory} />
+                <Dropdown id="businessCategory" value={field.value} onChange={(v) => { field.onChange(v); if (v !== "OTHER") setValue("customBusinessCategory", ""); }} onBlur={field.onBlur} disabled={metadataLoading || orderedIndustryOptions.length === 0} placeholder={metadataLoading ? "Loading..." : "Select industry"} options={orderedIndustryOptions.map((c) => ({ value: c.value, label: (INDUSTRY_EMOJI[c.value] ?? "🏢") + "  " + c.label }))} aria-invalid={!!errors.businessCategory} />
               )} />
             </FormField>
             <FormField label="Sub-Category" htmlFor="subCategory" error={errors.subCategory?.message as string} hint="e.g. Coffee Chains, Apparel, Grocery">
@@ -395,9 +434,39 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
           </div>
 
           {selectedCategory === "OTHER" && (
-            <FormField label="Your Industry" htmlFor="customBusinessCategory" error={errors.customBusinessCategory?.message as string} required hint="This will be added for future tenants">
+            <FormField
+              label="Your Industry"
+              htmlFor="customBusinessCategory"
+              error={errors.customBusinessCategory?.message as string}
+              required
+              hint="An admin will review this before it appears in the public industry list."
+            >
               <Input id="customBusinessCategory" placeholder="e.g. Logistics, EdTech, Agriculture..." {...register("customBusinessCategory")} />
             </FormField>
+          )}
+
+          {editMode && industryModeration && industryModeration.status === "PENDING_REVIEW" && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-900">
+                Industry awaiting admin review
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                <span className="font-medium">{industryModeration.label}</span> is saved on your
+                profile but won&rsquo;t appear in the public industry dropdown until an admin
+                approves it. You can keep it as-is, or pick an existing industry to switch.
+              </p>
+            </div>
+          )}
+
+          {editMode && industryModeration && industryModeration.status === "REJECTED" && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="text-sm font-semibold text-red-900">Industry suggestion rejected</p>
+              <p className="text-xs text-red-800 mt-1">
+                <span className="font-medium">{industryModeration.label}</span> was reviewed and
+                marked as not suitable. Please pick one of the listed industries.
+                {industryModeration.reason ? ` Reason: ${industryModeration.reason}` : ""}
+              </p>
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">

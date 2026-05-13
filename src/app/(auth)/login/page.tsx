@@ -46,6 +46,34 @@ export default function LoginPage() {
       syncStatusFromBackend(res.onboardingStatus);
 
       toast.success("Welcome back.");
+      // Route immediately to the right destination to avoid showing onboarding steps briefly.
+      // Guided Setup Progress routing:
+      // AGREEMENT_SIGNED → Configure
+      // CONFIGURED → Rules Setup
+      // RULES_CONFIGURED → Integrate
+      // SANDBOX_TESTING → Go Live
+      // ACTIVE → Dashboard
+      if (res.onboardingStatus === "AGREEMENT_SIGNED") {
+        router.replace("/dashboard/configure");
+        return;
+      }
+      if (res.onboardingStatus === "CONFIGURED") {
+        router.replace("/dashboard/loyalty-rules/create/basic-info");
+        return;
+      }
+      if (res.onboardingStatus === "RULES_CONFIGURED") {
+        router.replace("/dashboard/integrate");
+        return;
+      }
+      if (res.onboardingStatus === "SANDBOX_TESTING") {
+        router.replace("/dashboard/go-live");
+        return;
+      }
+      if (res.onboardingStatus === "ACTIVE") {
+        router.replace("/dashboard");
+        return;
+      }
+
       const step = STATUS_TO_STEP[res.onboardingStatus];
       router.replace(step === "programme" || step === "integration" || step === "complete" ? "/dashboard" : "/onboarding");
     } catch (err) {

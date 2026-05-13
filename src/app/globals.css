@@ -148,6 +148,25 @@
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+    color-scheme: light;
+  }
+
+  /* Native <select> dropdowns are painted by the browser; hint dark UI so menus match .dark tokens. */
+  html.dark {
+    color-scheme: dark;
+  }
+
+  /* Fallback when the OS popup stays light-ish: normalize option surfaces in dark mode. */
+  html.dark select option {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
   }
 
 }
