@@ -1,4 +1,8 @@
 {
+  "D:\\Loyalty-workspace\\loyaltyos-web-nextjs\\next-env.d.ts": {
+    "mtime": 1778668347.9804547,
+    "hash": "187b4b5b507c358a018aeeadd81abe57"
+  },
   "D:\\Loyalty-workspace\\loyaltyos-web-nextjs\\next.config.mjs": {
     "mtime": 1778651702.612002,
     "hash": "d22255e453468e95a94685220e289c7d"
@@ -260,8 +264,8 @@
     "hash": "ec7ab52fe3cdee8e7d0b0d5d8851649c"
   },
   "D:\\Loyalty-workspace\\loyaltyos-web-nextjs\\src\\components\\marketing\\animated-section.tsx": {
-    "mtime": 1778651702.6673732,
-    "hash": "f0bddfdc0e69d9cf4c54d7c9c2d37f49"
+    "mtime": 1778670231.2009623,
+    "hash": "03ea73bf5e2986cc2833aaa2aed15551"
   },
   "D:\\Loyalty-workspace\\loyaltyos-web-nextjs\\src\\components\\marketing\\landing-page.tsx": {
     "mtime": 1778651702.668376,
@@ -292,8 +296,8 @@
     "hash": "465ad5d0a9f2be7110bdcea88b85dec0"
   },
   "D:\\Loyalty-workspace\\loyaltyos-web-nextjs\\src\\components\\marketing\\section-hero.tsx": {
-    "mtime": 1778651702.671376,
-    "hash": "fabd28feeb763b904b407cfe62adaa60"
+    "mtime": 1778670226.7729642,
+    "hash": "aca83e5b3aa0cfe9dbff030a65cc4f7c"
   },
   "D:\\Loyalty-workspace\\loyaltyos-web-nextjs\\src\\components\\marketing\\section-pricing.tsx": {
     "mtime": 1778651702.6723757,

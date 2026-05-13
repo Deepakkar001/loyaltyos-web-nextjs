@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Shield, Layers, Cpu } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 
 const pills = [
@@ -13,7 +14,7 @@ const pills = [
 ] as const;
 
 export function SectionHero() {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
 
   return (
     <section aria-labelledby="hero-heading" className="bg-brand-950 px-6 pb-16 pt-10 md:pb-24 md:pt-14">
@@ -21,8 +22,8 @@ export function SectionHero() {
         <motion.div
           className="flex-1 text-center lg:text-left"
           initial={reduce ? false : { opacity: 0, y: 14 }}
-          animate={reduce ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
           <p className="text-brand-300 text-sm font-semibold uppercase tracking-widest mb-4">
             Loyalty that ships on a real calendar
@@ -70,8 +71,10 @@ export function SectionHero() {
         <motion.div
           className="flex-1 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8"
           initial={reduce ? false : { opacity: 0, y: 20 }}
-          animate={reduce ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={
+            reduce ? { duration: 0 } : { duration: 0.55, delay: 0.08, ease: [0.22, 1, 0.36, 1] }
+          }
         >
           <p className="text-xs font-semibold uppercase tracking-widest text-brand-300/90">Honest timelines</p>
           <ul className="mt-6 space-y-4 text-sm text-white/85">
