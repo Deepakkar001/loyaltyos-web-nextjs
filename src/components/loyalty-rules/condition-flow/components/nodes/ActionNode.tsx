@@ -12,8 +12,10 @@ import { cn } from "@/lib/utils";
 import type { ActionNodeData } from "../../types";
 import { useNodeErrorLevel } from "../../errorsContext";
 import { useConditionFlowActions } from "../../actionsContext";
+import { useConditionFlowReadOnly } from "../../viewModeContext";
 
 function titleFor(a: ActionNodeData) {
+  if (a.displayTitle) return a.displayTitle;
   if (a.actionType === "award_points") return "Award Points";
   if (a.actionType === "tier_upgrade") return "Tier Upgrade";
   if (a.actionType === "notify") return "Notify";
@@ -22,6 +24,7 @@ function titleFor(a: ActionNodeData) {
 }
 
 export function ActionNode({ id, data, selected }: NodeProps<ActionNodeData>) {
+  const readOnly = useConditionFlowReadOnly();
   const level = useNodeErrorLevel(id);
   const actions = useConditionFlowActions();
   const [open, setOpen] = useState(false);
@@ -41,8 +44,11 @@ export function ActionNode({ id, data, selected }: NodeProps<ActionNodeData>) {
         Action
       </p>
       <p className="mt-1 text-sm font-semibold text-foreground">{titleFor(data)}</p>
-      <p className="mt-1 text-xs text-muted-foreground">Type: {data.actionType}</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {data.displayTypeLine ?? `Type: ${data.actionType}`}
+      </p>
 
+      {readOnly ? null : (
       <div className="mt-3 flex gap-2">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger>
@@ -104,6 +110,7 @@ export function ActionNode({ id, data, selected }: NodeProps<ActionNodeData>) {
           </DialogContent>
         </Dialog>
       </div>
+      )}
 
       <Handle type="target" position={Position.Top} className="!bg-orange-500 !border-orange-600" />
     </div>

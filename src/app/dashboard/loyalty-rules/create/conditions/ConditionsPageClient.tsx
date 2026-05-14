@@ -222,14 +222,9 @@ export default function ConditionsPageClient() {
         );
         return;
       }
-      // Diagram mode has NO explicit "applies to everyone" UI. If the resulting
-      // tree still collapses to `everyone` despite having condition nodes, the
-      // wiring is broken (e.g. both yes/no branches reach the same award action,
-      // or the predicate is logically tautological). Refuse to save `{}` — the
-      // user must fix the diagram, not silently publish a match-all rule.
       if (sync.tree.kind === "everyone") {
         toast.error(
-          "Your diagram has conditions but every path leads to the same outcome — that is logically the same as 'everyone'. Re-wire one of the branches (e.g. send the 'no' path to 'no action') or switch to Classic and choose 'Applies to everyone'."
+          "The diagram could not be converted to a safe condition tree. Check the validation badge for details."
         );
         return;
       }

@@ -32,6 +32,7 @@ import type { ConditionTreeDraft } from "../condition-builder/types";
 import { diagramFromConditionTree } from "./diagramFromTree";
 import { RuleTreeBuilder } from "./treeBuilder";
 import type { ConditionFlowEdge, ConditionFlowNode, ValidationError } from "./types";
+import { getConditionBranchLabel } from "./types";
 import { ValidationPanel } from "./components/ValidationPanel";
 import { ConditionNode } from "./components/nodes/ConditionNode";
 import { ActionNode } from "./components/nodes/ActionNode";
@@ -82,7 +83,11 @@ export interface RuleFlowBuilderHandle {
     hasConditionNodes: boolean;
     /** True when the treeBuilder or validators produced blocking errors. */
     hasErrors: boolean;
+<<<<<<< Updated upstream
     /** First blocking error — for toast text when Next is pressed. */
+=======
+    /** First blocking error message (for toast). */
+>>>>>>> Stashed changes
     firstErrorMessage?: string;
   };
 }
@@ -108,7 +113,12 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     derived.edges.map((e) => ({
       ...e,
-      label: e.data?.label === "yes" ? "yes" : e.data?.label === "no" ? "no" : undefined,
+      label:
+        getConditionBranchLabel(e as ConditionFlowEdge) === "yes"
+          ? "yes"
+          : getConditionBranchLabel(e as ConditionFlowEdge) === "no"
+            ? "no"
+            : undefined,
     })) as unknown as Edge[]
   );
 
@@ -179,7 +189,12 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
       setEdges(
         derived.edges.map((e) => ({
           ...e,
-          label: e.data?.label === "yes" ? "yes" : e.data?.label === "no" ? "no" : undefined,
+          label:
+            getConditionBranchLabel(e as ConditionFlowEdge) === "yes"
+              ? "yes"
+              : getConditionBranchLabel(e as ConditionFlowEdge) === "no"
+                ? "no"
+                : undefined,
         })) as unknown as Edge[]
       );
       // Treat the incoming value as if the canvas last emitted it so the next
@@ -307,7 +322,7 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
             removed.push("Event allows only 1 outgoing connection (replaced).");
             return false;
           }
-          if (isCond && c.source && e.source === c.source && e.data?.label === label) {
+          if (isCond && c.source && e.source === c.source && getConditionBranchLabel(e as ConditionFlowEdge) === label) {
             removed.push(`Condition allows only 1 "${label}" connection (replaced).`);
             return false;
           }

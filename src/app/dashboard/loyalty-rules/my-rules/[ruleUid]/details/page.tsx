@@ -13,6 +13,7 @@ import { loyaltyRulesAdminApi, onboardingApi } from "@/lib/api/client";
 import type { EarnRuleDetailResponse, RuleStatus } from "@/types/rules";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { clearSandboxGate, getSandboxGate } from "@/lib/store/rule-sandbox-gate";
+import { RuleConditionFlowPreview } from "@/components/loyalty-rules/condition-flow/RuleConditionFlowPreview";
 
 export default function RuleDetailsPage() {
   const router = useRouter();
@@ -244,10 +245,23 @@ export default function RuleDetailsPage() {
         <Separator />
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold">Condition Tree (raw)</p>
-          <pre className="text-xs overflow-auto rounded-xl border border-border bg-[var(--surface-sunken)] p-3">
-            {JSON.stringify(rule.conditionTree ?? {}, null, 2)}
-          </pre>
+          <p className="text-sm font-semibold">Condition flow</p>
+          <p className="text-xs text-muted-foreground">
+            Same layout as the rule editor diagram. Pan and zoom to explore; this view is read-only.
+          </p>
+          <RuleConditionFlowPreview
+            conditionTree={rule.conditionTree}
+            eventType={rule.triggerEventType}
+            actions={rule.actions}
+          />
+          <details className="rounded-xl border border-border/70 bg-[var(--surface-sunken)] px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground select-none">
+              Technical: condition tree (JSON)
+            </summary>
+            <pre className="text-xs overflow-auto mt-2 pb-1 max-h-64 border-t border-border/60 pt-2">
+              {JSON.stringify(rule.conditionTree ?? {}, null, 2)}
+            </pre>
+          </details>
         </div>
       </Card>
 

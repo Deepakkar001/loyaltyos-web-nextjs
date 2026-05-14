@@ -13,6 +13,7 @@ import type { ComparisonOp, ConditionField } from "../../../condition-builder/ty
 import { FIELD_METADATA, OPERATOR_LABELS, OPERATORS_BY_TYPE, OPERATORS_WITH_ANY_TYPE, type ConditionNodeData } from "../../types";
 import { useNodeErrorLevel } from "../../errorsContext";
 import { useConditionFlowActions } from "../../actionsContext";
+import { useConditionFlowReadOnly } from "../../viewModeContext";
 
 function opsForField(field: ConditionField | null): ComparisonOp[] {
   if (!field) return [...OPERATORS_WITH_ANY_TYPE];
@@ -21,6 +22,7 @@ function opsForField(field: ConditionField | null): ComparisonOp[] {
 }
 
 export function ConditionNode({ id, data, selected }: NodeProps<ConditionNodeData>) {
+  const readOnly = useConditionFlowReadOnly();
   const level = useNodeErrorLevel(id);
   const actions = useConditionFlowActions();
   const [editing, setEditing] = useState(false);
@@ -67,6 +69,8 @@ export function ConditionNode({ id, data, selected }: NodeProps<ConditionNodeDat
           <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 truncate">Condition</p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {readOnly ? null : (
+            <>
           <button
             type="button"
             className={cn(
@@ -82,10 +86,12 @@ export function ConditionNode({ id, data, selected }: NodeProps<ConditionNodeDat
           <Button type="button" variant="ghost" className="h-8 w-8 p-0" onClick={() => actions.deleteNode(id)} aria-label="Delete condition">
             <Trash2 className="h-4 w-4 text-muted-foreground" />
           </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {!editing ? (
+      {readOnly || !editing ? (
         <div className="mt-3">
           <p className="text-xs text-muted-foreground leading-relaxed">
             {draft.negate ? "NOT " : ""}
@@ -98,11 +104,13 @@ export function ConditionNode({ id, data, selected }: NodeProps<ConditionNodeDat
                   ? draft.value.join(", ")
                   : String(draft.value)}
           </p>
+          {readOnly ? null : (
           <div className="mt-3 flex gap-2">
             <Button type="button" variant="outline" className="h-8 rounded-full text-xs" onClick={() => setEditing(true)}>
               Edit
             </Button>
           </div>
+          )}
         </div>
       ) : (
         <div className="mt-2 space-y-2">

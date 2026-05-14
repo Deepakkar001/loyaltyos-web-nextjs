@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Settings, RefreshCw, Search } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { programmeApiV2, ApiError, ensureAuthSession } from "@/lib/api/client";
 import type { ProgrammeSummaryResponse } from "@/types/onboarding";
 
@@ -19,6 +20,8 @@ export default function MyConfigurationsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const [newProgrammeDialogOpen, setNewProgrammeDialogOpen] = useState(false);
+  const [newProgrammeNameDraft, setNewProgrammeNameDraft] = useState("");
 
   const load = async () => {
     try {
@@ -85,23 +88,66 @@ export default function MyConfigurationsPage() {
     setRefreshing(false);
   };
 
-  const onCreate = async () => {
+  const openNewProgrammeDialog = useCallback(() => {
+    setNewProgrammeNameDraft("");
+    setNewProgrammeDialogOpen(true);
+  }, []);
+
+  const createNewProgramme = useCallback(async () => {
+    const trimmed = newProgrammeNameDraft.trim();
+    if (trimmed.length < 2) {
+      toast.error("Enter a programme name (at least 2 characters).");
+      return;
+    }
     setCreating(true);
     try {
       await ensureAuthSession();
-      const next = rows.length + 1;
-      const created = await programmeApiV2.createProgramme({ name: `Programme ${next}` });
+      const created = await programmeApiV2.createProgramme({ name: trimmed });
       toast.success("Programme created. You can now configure it.");
       setRows((prev) => [...prev, { ...created, hasConfig: false }]);
+      setNewProgrammeDialogOpen(false);
+      setNewProgrammeNameDraft("");
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Could not create programme");
     } finally {
       setCreating(false);
     }
-  };
+  }, [newProgrammeNameDraft]);
 
   return (
     <div className="px-4 py-6 lg:px-8 lg:py-8 space-y-6">
+      <Dialog open={newProgrammeDialogOpen} onOpenChange={setNewProgrammeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New programme</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This name appears in your programme list and in Configure Programme. You can align it with your public
+            loyalty programme name when you save configuration.
+          </p>
+          <Input
+            autoFocus
+            placeholder="e.g. North Region Rewards"
+            value={newProgrammeNameDraft}
+            onChange={(e) => setNewProgrammeNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createNewProgramme();
+              }
+            }}
+          />
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setNewProgrammeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={creating} onClick={() => void createNewProgramme()}>
+              {creating ? "Creating…" : "Create programme"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">My Configurations</h1>
@@ -119,9 +165,9 @@ export default function MyConfigurationsPage() {
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button className="rounded-full" onClick={onCreate} disabled={creating}>
+          <Button className="rounded-full" onClick={openNewProgrammeDialog} disabled={loading || creating}>
             <Plus className="w-4 h-4 mr-2" />
-            {creating ? "Creating…" : "New Programme"}
+            New Programme
           </Button>
         </div>
       </div>
@@ -149,9 +195,9 @@ export default function MyConfigurationsPage() {
             Create a new programme, or adjust your search.
           </p>
           <div className="mt-4 flex items-center gap-2">
-            <Button className="rounded-full" onClick={onCreate} disabled={creating}>
+            <Button className="rounded-full" onClick={openNewProgrammeDialog} disabled={loading || creating}>
               <Plus className="w-4 h-4 mr-2" />
-              {creating ? "Creating…" : "Create Programme"}
+              Create Programme
             </Button>
             <Button
               variant="outline"

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -15,12 +15,18 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldHelp } from "@/components/ui/field-help";
+import { NativeSelect } from "@/components/ui/native-select";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
 import { cn } from "@/lib/utils";
+import { programmeApiV2, ApiError } from "@/lib/api/client";
+import {
+  extractEventTypesFromProgrammeConfig,
+  mergeProgrammeDropdownRows,
+} from "@/lib/programme/programme-config-helpers";
 
 const schema = z.object({
-  programmeUid: z.string().default("default"),
+  programmeUid: z.string().min(1),
   name: z.string().min(2).max(100),
   description: z.string().max(2000).optional(),
   priority: z.coerce.number().min(0).max(100),
@@ -46,8 +52,42 @@ export default function CreateRuleBasicInfoPage() {
     },
   });
 
+  const programmeUid = useWatch({ control: form.control, name: "programmeUid" });
+  const triggerEventType = useWatch({ control: form.control, name: "triggerEventType" });
+
+  const [programmeRows, setProgrammeRows] = useState<Array<{ programmeUid: string; name: string }>>([
+    { programmeUid: "default", name: "Default programme" },
+  ]);
+  const [programmesLoading, setProgrammesLoading] = useState(false);
+  const [eventTypes, setEventTypes] = useState<string[]>(["PURCHASE"]);
+  const [eventTypesLoading, setEventTypesLoading] = useState(false);
+  /** Bumped when a stored draft is merged into the form so event-type options refetch for the loaded trigger. */
+  const [draftBootstrapKey, setDraftBootstrapKey] = useState(0);
+
   const name = form.watch("name");
   const nameCount = useMemo(() => (name ?? "").length, [name]);
+
+  const programmeSelectRows = useMemo(() => {
+    const rows = [...programmeRows];
+    if (programmeUid && !rows.some((r) => r.programmeUid === programmeUid)) {
+      rows.push({ programmeUid, name: `${programmeUid} (saved rule)` });
+    }
+    return rows;
+  }, [programmeRows, programmeUid]);
+
+  const programmeSelectOptions = useMemo(
+    () =>
+      programmeSelectRows.map((p) => ({
+        value: p.programmeUid,
+        label: `${p.name} (${p.programmeUid})`,
+      })),
+    [programmeSelectRows]
+  );
+
+  const eventTypeSelectOptions = useMemo(
+    () => eventTypes.map((t) => ({ value: t, label: t })),
+    [eventTypes]
+  );
 
   useEffect(() => {
     if (!tenantId) return;
@@ -61,16 +101,67 @@ export default function CreateRuleBasicInfoPage() {
       triggerEventType: existing.triggerEventType ?? "PURCHASE",
       executionMode: existing.executionMode ?? "ALL_MATCHING",
     });
+    setDraftBootstrapKey((k) => k + 1);
   }, [tenantId, form]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    (async () => {
+      setProgrammesLoading(true);
+      try {
+        const list = await programmeApiV2.listProgrammes();
+        if (cancelled) return;
+        setProgrammeRows(mergeProgrammeDropdownRows(list ?? []));
+      } catch (e) {
+        if (!cancelled && e instanceof ApiError) toast.error(e.message);
+      } finally {
+        if (!cancelled) setProgrammesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!tenantId || !programmeUid) return;
+    let cancelled = false;
+    const preserveTrigger = form.getValues("triggerEventType");
+    (async () => {
+      setEventTypesLoading(true);
+      try {
+        const blob = await programmeApiV2.getProgrammeConfig(programmeUid);
+        if (cancelled) return;
+        const types = extractEventTypesFromProgrammeConfig(blob?.config, [preserveTrigger]);
+        setEventTypes(types);
+        const current = form.getValues("triggerEventType");
+        if (!types.includes(current)) {
+          form.setValue("triggerEventType", types[0] ?? "PURCHASE", { shouldValidate: true });
+        }
+      } catch (e) {
+        if (cancelled) return;
+        const types = extractEventTypesFromProgrammeConfig(null, [preserveTrigger]);
+        setEventTypes(types);
+        const current = form.getValues("triggerEventType");
+        if (!types.includes(current)) {
+          form.setValue("triggerEventType", types[0] ?? "PURCHASE", { shouldValidate: true });
+        }
+        if (e instanceof ApiError) toast.error(e.message);
+      } finally {
+        if (!cancelled) setEventTypesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, programmeUid, draftBootstrapKey, form]);
 
   const onNext = form.handleSubmit((data) => {
     if (!tenantId) {
       toast.error("Missing tenant session. Please re-login.");
       return;
     }
-    // Only write the fields this step owns. conditionTree, actions, and
-    // scheduling are preserved by saveRuleDraftFields' merge semantics so
-    // revisiting Basic Info never clobbers progress in later steps.
     saveRuleDraftFields(tenantId, {
       programmeUid: data.programmeUid ?? "default",
       name: data.name,
@@ -85,12 +176,13 @@ export default function CreateRuleBasicInfoPage() {
 
   return (
     <CreateRuleShell title="Create Loyalty Rule">
-      <Card className="p-6 border-border/70 bg-[var(--surface-card)]">
+      <Card className="overflow-visible p-6 border-border/70 bg-[var(--surface-card)]">
         <div className="space-y-6">
           <div>
             <p className="text-sm font-semibold">Basic Information</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Give your rule a clear, memorable name. You can refine conditions and actions in the next steps.
+              Give your rule a clear, memorable name. Programme and trigger event type use your browser’s native
+              dropdowns (lists from the API and your saved programme configuration).
             </p>
           </div>
 
@@ -126,13 +218,28 @@ export default function CreateRuleBasicInfoPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <Label htmlFor="priority" className="text-xs text-muted-foreground">
-                  Rule Priority *
+                <Label htmlFor="programmeUid" className="text-xs text-muted-foreground">
+                  Programme *
                 </Label>
-                <FieldHelp text="When multiple rules match the same event, higher priority is evaluated first. Use higher numbers for ‘must win’ rules; lower for optional bonuses." />
+                <FieldHelp text="Rules are scoped to one programme. The list matches Programmes under Configure; pick the same programmeUid your events send." />
               </div>
-              <Input id="priority" type="number" min={0} max={100} {...form.register("priority")} />
-              <p className="text-xs text-muted-foreground">Higher priority evaluates first.</p>
+              <NativeSelect
+                id="programmeUid"
+                name="programmeUid"
+                ariaLabel="Programme"
+                value={programmeUid}
+                disabled={programmesLoading || programmeSelectOptions.length === 0}
+                onChange={(v) =>
+                  form.setValue("programmeUid", v || "default", { shouldValidate: true, shouldDirty: true })
+                }
+                options={programmeSelectOptions}
+              />
+              {programmesLoading ? (
+                <p className="text-xs text-muted-foreground">Loading programmes…</p>
+              ) : null}
+              {form.formState.errors.programmeUid && (
+                <p className="text-xs text-red-600">{form.formState.errors.programmeUid.message}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -140,12 +247,34 @@ export default function CreateRuleBasicInfoPage() {
                 <Label htmlFor="triggerEventType" className="text-xs text-muted-foreground">
                   Trigger Event Type *
                 </Label>
-                <FieldHelp text="The event name that triggers this rule (must match what your integration sends). Example: PURCHASE, ORDER_PAID, CHECKIN." />
+                <FieldHelp text="Event types are loaded from Configure Programme → Events for the selected programme. If none are defined yet, common defaults are shown; add definitions there for full control." />
               </div>
-              <Input id="triggerEventType" placeholder="e.g. PURCHASE" {...form.register("triggerEventType")} />
+              <NativeSelect
+                id="triggerEventType"
+                name="triggerEventType"
+                ariaLabel="Trigger event type"
+                value={triggerEventType}
+                disabled={eventTypesLoading || eventTypeSelectOptions.length === 0}
+                onChange={(v) => form.setValue("triggerEventType", v, { shouldValidate: true, shouldDirty: true })}
+                options={eventTypeSelectOptions}
+              />
+              {eventTypesLoading ? (
+                <p className="text-xs text-muted-foreground">Loading event types for this programme…</p>
+              ) : null}
               {form.formState.errors.triggerEventType && (
                 <p className="text-xs text-red-600">{form.formState.errors.triggerEventType.message}</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="priority" className="text-xs text-muted-foreground">
+                  Rule Priority *
+                </Label>
+                <FieldHelp text="When multiple rules match the same event, higher priority is evaluated first. Use higher numbers for ‘must win’ rules; lower for optional bonuses." />
+              </div>
+              <Input id="priority" type="number" min={0} max={100} {...form.register("priority")} />
+              <p className="text-xs text-muted-foreground">Higher priority evaluates first.</p>
             </div>
 
             <div className="space-y-2 md:col-span-2">
@@ -212,4 +341,3 @@ export default function CreateRuleBasicInfoPage() {
     </CreateRuleShell>
   );
 }
-

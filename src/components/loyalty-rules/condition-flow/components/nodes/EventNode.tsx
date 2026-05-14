@@ -11,6 +11,7 @@ import { FIELD_METADATA } from "../../types";
 import { useNodeErrorLevel } from "../../errorsContext";
 import { cn } from "@/lib/utils";
 import { useConditionFlowActions } from "../../actionsContext";
+import { useConditionFlowReadOnly } from "../../viewModeContext";
 
 const EVENT_OPTIONS = [
   { label: "Purchase", value: "purchase" },
@@ -19,6 +20,7 @@ const EVENT_OPTIONS = [
 ] as const;
 
 export function EventNode({ id, data, selected }: NodeProps<EventNodeData>) {
+  const readOnly = useConditionFlowReadOnly();
   const level = useNodeErrorLevel(id);
   const actions = useConditionFlowActions();
   const [open, setOpen] = useState(false);
@@ -38,6 +40,7 @@ export function EventNode({ id, data, selected }: NodeProps<EventNodeData>) {
       <p className="mt-1 text-sm font-semibold text-foreground">{data.eventType ? data.eventType.toUpperCase() : "Select event"}</p>
       <p className="mt-2 text-xs text-muted-foreground">Start of the rule evaluation.</p>
 
+      {readOnly ? null : (
       <div className="mt-3">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger>
@@ -87,6 +90,7 @@ export function EventNode({ id, data, selected }: NodeProps<EventNodeData>) {
           </DialogContent>
         </Dialog>
       </div>
+      )}
 
       <Handle type="source" position={Position.Bottom} className="!bg-emerald-500 !border-emerald-600" />
     </div>

@@ -1,6 +1,6 @@
 import type { ComparisonOp, ConditionField } from "../condition-builder/types";
 import type { ConditionFlowEdge, ConditionFlowNode, ValidationError } from "./types";
-import { FIELD_METADATA, OPERATORS_BY_TYPE, OPERATORS_WITH_ANY_TYPE } from "./types";
+import { FIELD_METADATA, getConditionBranchLabel, OPERATORS_BY_TYPE, OPERATORS_WITH_ANY_TYPE } from "./types";
 
 function newErrorId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`;
@@ -75,8 +75,8 @@ export class GraphValidator {
     for (const node of nodes) {
       if (node.type !== "conditionNode") continue;
       const outgoing = getOutgoing(edges, node.id);
-      const hasYes = outgoing.some((e) => e.data?.label === "yes");
-      const hasNo = outgoing.some((e) => e.data?.label === "no");
+      const hasYes = outgoing.some((e) => getConditionBranchLabel(e) === "yes");
+      const hasNo = outgoing.some((e) => getConditionBranchLabel(e) === "no");
       if (!hasYes || !hasNo) {
         errors.push({
           id: newErrorId(),
