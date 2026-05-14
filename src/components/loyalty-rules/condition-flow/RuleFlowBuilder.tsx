@@ -83,11 +83,7 @@ export interface RuleFlowBuilderHandle {
     hasConditionNodes: boolean;
     /** True when the treeBuilder or validators produced blocking errors. */
     hasErrors: boolean;
-<<<<<<< Updated upstream
     /** First blocking error — for toast text when Next is pressed. */
-=======
-    /** First blocking error message (for toast). */
->>>>>>> Stashed changes
     firstErrorMessage?: string;
   };
 }

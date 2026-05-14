@@ -195,12 +195,9 @@ export class RuleTreeBuilder {
     });
 
     // If any empty conjunction exists, the OR is always true => everyone.
-<<<<<<< Updated upstream
     // This is almost always a wiring mistake (e.g. Event still connects to Award,
     // or a Logic OR merges a "no filter" branch with a real branch into Award).
     // Surface as a blocking error so the badge is not green and Next explains why.
-=======
->>>>>>> Stashed changes
     if (ordered.some(([, conj]) => conj.length === 0)) {
       return {
         tree: { kind: "everyone" },
@@ -209,11 +206,7 @@ export class RuleTreeBuilder {
           {
             id: "unfiltered_path_to_award",
             nodeId: "event",
-<<<<<<< Updated upstream
-            severity: "error",
-=======
             severity: "error" as const,
->>>>>>> Stashed changes
             message:
               "Every event would earn points: at least one path reaches Award Points without passing through any condition.",
             suggestedFix:
