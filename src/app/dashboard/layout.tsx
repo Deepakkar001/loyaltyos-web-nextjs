@@ -360,7 +360,6 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
   const [hydrated, setHydrated] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [welcomeName, setWelcomeName] = useState<string | null>(null);
-  const [refreshTried, setRefreshTried] = useState(false);
   const [underReview, setUnderReview] = useState(false);
   const [checkingReview, setCheckingReview] = useState(false);
 
@@ -375,7 +374,6 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
         sessionStorage.setItem("loyaltyos_logout_intent", "1");
       }
       logout();
-      setRefreshTried(true); // prevent any in-flight auto-refresh attempt during navigation
       router.replace("/login");
     }
   };
@@ -436,6 +434,26 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
     };
   }, [accessToken, hydrated, setRegistrationData]);
 
+  // After reload the in-memory access token is empty; restore it via refresh cookie.
+  // Must run in an effect: updating state during render (the old refreshTried pattern) re-rendered
+  // before ensureAuthSession() finished and immediately sent users to /login.
+  const isLoginLikePath = pathname === "/login" || pathname.startsWith("/onboarding");
+  useEffect(() => {
+    if (!hydrated || isLoginLikePath) return;
+    if (typeof window !== "undefined" && sessionStorage.getItem("loyaltyos_logout_intent") === "1") {
+      return;
+    }
+    if (accessToken) return;
+
+    let active = true;
+    ensureAuthSession().catch(() => {
+      if (active) router.replace("/login");
+    });
+    return () => {
+      active = false;
+    };
+  }, [hydrated, isLoginLikePath, accessToken, pathname, router]);
+
   const refreshAgreementReviewState = async () => {
     if (checkingReview) return;
     setCheckingReview(true);
@@ -458,8 +476,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
     }
   };
 
-  const isLoginLikePage = pathname === "/login" || pathname.startsWith("/onboarding");
-  if (isLoginLikePage) return <>{children}</>;
+  if (isLoginLikePath) return <>{children}</>;
 
   if (!hydrated) {
     return (
@@ -475,19 +492,11 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
       router.replace("/login");
       return null;
     }
-    if (!refreshTried) {
-      setRefreshTried(true);
-      (async () => {
-        try {
-          await ensureAuthSession();
-        } catch {
-          router.replace("/login");
-        }
-      })();
-      return null;
-    }
-    router.replace("/login");
-    return null;
+    return (
+      <div className="min-h-screen bg-[var(--surface-page)] flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (

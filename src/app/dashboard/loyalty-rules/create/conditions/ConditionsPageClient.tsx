@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 import { CreateRuleShell } from "../_components/CreateRuleShell";
@@ -14,6 +14,8 @@ import { toBackendConditionTree, type ConditionNode, type ConditionGroup, type C
 import { RuleFlowBuilder, type RuleFlowBuilderHandle } from "@/components/loyalty-rules/condition-flow/RuleFlowBuilder";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
+
+const CONDITIONS_PATH = "/dashboard/loyalty-rules/create/conditions";
 
 // ── Deep tree validation helpers ─────────────────────────────────────────────
 
@@ -78,7 +80,12 @@ function ModeToggle({
 
 export default function ConditionsPageClient() {
   const router = useRouter();
+  const pathname = usePathname();
   const tenantId = useOnboardingStore((s) => s.tenantId) ?? "";
+  /** Persist rehydration can lag one frame; draft load must re-run when tenantId becomes available. */
+  const [storeHydrated, setStoreHydrated] = useState(
+    () => typeof window !== "undefined" && useOnboardingStore.persist.hasHydrated()
+  );
 
   const [tree, setTree] = useState<ConditionTreeDraft>({ kind: "group", id: "root", op: "AND", nodes: [] });
   const [uiMode, setUiMode] = useState<"current" | "diagram">("current");
@@ -94,11 +101,31 @@ export default function ConditionsPageClient() {
   const ruleFlowRef = useRef<RuleFlowBuilderHandle>(null);
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (useOnboardingStore.persist.hasHydrated()) {
+      setStoreHydrated(true);
+      return;
+    }
+    return useOnboardingStore.persist.onFinishHydration(() => {
+      setStoreHydrated(true);
+    });
+  }, []);
+
+  // Re-apply draft whenever this route is shown or tenant / store hydration updates.
+  // Relying only on [tenantId] misses returns from later wizard steps (same tenantId)
+  // if the effect ordering ever skips a run; pathname + layout timing fixes that.
+  useLayoutEffect(() => {
+    if (!tenantId || !storeHydrated) return;
+    if (!pathname.includes(CONDITIONS_PATH)) return;
+
+    setDiagramValid(false);
+
     const existing = loadRuleDraft(tenantId);
     if (!existing) return;
 
     setEventType(existing.triggerEventType || "purchase");
+    if (existing.conditionUiMode === "diagram" || existing.conditionUiMode === "current") {
+      setUiMode(existing.conditionUiMode);
+    }
     // Distinguish "user has not visited Conditions yet" (no conditionTree key
     // in storage at all) from "user explicitly chose everyone" ({} stored).
     // The first case must NOT collapse to `everyone` because that would skip
@@ -108,7 +135,44 @@ export default function ConditionsPageClient() {
     } else {
       setTree(fromBackendConditionTree(existing.conditionTree));
     }
-  }, [tenantId]);
+  }, [tenantId, pathname, storeHydrated]);
+
+  // Autosave so users who jump via the step tabs (without clicking Next) do not lose work.
+  useEffect(() => {
+    if (!tenantId || !storeHydrated) return;
+    if (!pathname.includes(CONDITIONS_PATH)) return;
+
+    const t = window.setTimeout(() => {
+      const base = loadRuleDraft(tenantId);
+      if (!base?.name) return;
+
+      if (uiMode === "diagram") {
+        if (!diagramValid) return;
+        const sync = ruleFlowRef.current?.computeCurrentTree();
+        if (!sync || sync.hasErrors || !sync.hasConditionNodes || sync.tree.kind === "everyone") return;
+        saveRuleDraftFields(tenantId, {
+          conditionTree: toBackendConditionTree(sync.tree),
+          conditionUiMode: "diagram",
+        });
+        return;
+      }
+
+      if (!isTreeValid(tree)) return;
+      saveRuleDraftFields(tenantId, {
+        conditionTree: toBackendConditionTree(tree),
+        conditionUiMode: "current",
+      });
+    }, 450);
+    return () => window.clearTimeout(t);
+  }, [tree, tenantId, uiMode, diagramValid, pathname, storeHydrated]);
+
+  const handleUiModeChange = useCallback(
+    (m: "current" | "diagram") => {
+      setUiMode(m);
+      if (tenantId) saveRuleDraftFields(tenantId, { conditionUiMode: m });
+    },
+    [tenantId]
+  );
 
   const handleDiagramValidChange = useCallback((valid: boolean) => {
     setDiagramValid(valid);
@@ -146,7 +210,10 @@ export default function ConditionsPageClient() {
         return;
       }
       if (sync.hasErrors) {
-        toast.error("Fix the diagram errors before proceeding (check the validation badge).");
+        toast.error(
+          sync.firstErrorMessage ??
+            "Fix the diagram errors before proceeding (check the validation badge)."
+        );
         return;
       }
       if (!sync.hasConditionNodes) {
@@ -167,7 +234,7 @@ export default function ConditionsPageClient() {
         return;
       }
       const conditionTree = toBackendConditionTree(sync.tree);
-      saveRuleDraftFields(tenantId, { conditionTree });
+      saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "diagram" });
       router.push("/dashboard/loyalty-rules/create/actions");
       return;
     }
@@ -178,7 +245,7 @@ export default function ConditionsPageClient() {
       return;
     }
     const conditionTree = toBackendConditionTree(tree);
-    saveRuleDraftFields(tenantId, { conditionTree });
+    saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "current" });
     router.push("/dashboard/loyalty-rules/create/actions");
   };
 
@@ -192,7 +259,7 @@ export default function ConditionsPageClient() {
               <p className="text-sm font-semibold">When These Conditions Match</p>
               <FieldHelp text="Conditions decide who qualifies for this rule. Use 'Applies to everyone' for broad rules, or add filters like tier, channel, amount thresholds, or customer attributes." />
             </div>
-            <ModeToggle mode="diagram" onChange={setUiMode} />
+            <ModeToggle mode="diagram" onChange={handleUiModeChange} />
           </div>
 
           <RuleFlowBuilder
@@ -243,7 +310,7 @@ export default function ConditionsPageClient() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <ModeToggle mode="current" onChange={setUiMode} />
+            <ModeToggle mode="current" onChange={handleUiModeChange} />
             <p className="text-xs text-muted-foreground">Both views save the same backend condition tree.</p>
           </div>
 

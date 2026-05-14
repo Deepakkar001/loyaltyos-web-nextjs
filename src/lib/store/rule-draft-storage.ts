@@ -46,6 +46,9 @@ export type RuleDraft = {
 
   effectiveAt?: string; // ISO
   endAt?: string; // ISO
+
+  /** Which Conditions UI the user last used — local draft only, not sent to API. */
+  conditionUiMode?: "current" | "diagram";
 };
 
 export type RuleDraftFields = Partial<RuleDraft>;

@@ -40,6 +40,9 @@ export default function LoginPage() {
   const onSubmit = async (data: FormData) => {
     try {
       const res = await onboardingApi.login(data.email, data.password);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("loyaltyos_logout_intent");
+      }
       setAccessToken(res.accessToken);
       setTenantId(res.tenantId);
       setRegistrationData({ email: res.email });
