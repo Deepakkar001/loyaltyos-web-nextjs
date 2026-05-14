@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { FieldHelp } from "@/components/ui/field-help";
 import { NativeSelect } from "@/components/ui/native-select";
+import { PillToggle } from "@/components/ui/pill-toggle";
 
 const PRESETS = {
   RETAIL: {
@@ -299,45 +300,6 @@ const CONFIG_STEP_FIELD_GROUPS: Array<Array<keyof FormData>> = [
   ],
 ];
 
-function PillToggle({
-  pressed,
-  onPressedChange,
-  srLabel,
-  size = "md",
-}: {
-  pressed: boolean;
-  onPressedChange: (next: boolean) => void;
-  srLabel: string;
-  size?: "sm" | "md";
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onPressedChange(!pressed)}
-      aria-pressed={pressed}
-      className={cn(
-        "relative inline-flex shrink-0 items-center rounded-full border transition-colors",
-        size === "sm" ? "h-7 w-[44px]" : "h-8 w-[52px]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        pressed ? "border-primary/50 bg-primary" : "border-border bg-muted"
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute left-1 top-1 rounded-full shadow-sm ring-1 ring-black/5 transition-transform",
-          size === "sm" ? "h-5 w-5" : "h-6 w-6",
-          "dark:ring-white/10",
-          pressed
-            ? cn("bg-amber-300", size === "sm" ? "translate-x-4" : "translate-x-5")
-            : "bg-slate-300 dark:bg-slate-300 translate-x-0"
-        )}
-      />
-      <span className="sr-only">{srLabel}</span>
-    </button>
-  );
-}
-
 function unionStandardFieldsFromEventDefinitions(defs: z.infer<typeof eventDefinitionSchema>[]) {
   const map = new Map<string, { name: string; type: z.infer<typeof eventCoreFieldSchema>["type"]; required: boolean }>();
   for (const def of defs) {
@@ -412,17 +374,19 @@ function EventDefinitionCoreFields({
               { value: "object", label: "object" },
             ]}
           />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 lg:min-w-[200px]">
+            <span className="text-sm font-medium text-foreground">
+              {watch(`eventDefinitions.${nestIndex}.coreFields.${i}.required`) ? "Required" : "Optional"}
+            </span>
             <PillToggle
               pressed={watch(`eventDefinitions.${nestIndex}.coreFields.${i}.required`)}
               onPressedChange={(v) => setValue(`eventDefinitions.${nestIndex}.coreFields.${i}.required`, v)}
               srLabel={
                 watch(`eventDefinitions.${nestIndex}.coreFields.${i}.required`)
-                  ? "Mark core field as optional"
-                  : "Mark core field as required"
+                  ? "Turn off: mark core field as optional"
+                  : "Turn on: mark core field as required"
               }
             />
-            <span className="text-sm font-medium">Required</span>
           </div>
           <button
             type="button"
@@ -1930,19 +1894,25 @@ export function Step4Programme() {
                   text="Field type controls how LoyaltyOS validates this value (and which operators you can use in conditions). Example: channel = string, amount = number, isInternational = boolean."
                   label="Custom field type help"
                 />
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 min-w-[200px]">
+                  <span className="text-sm font-medium text-foreground">
+                    {watch(`customFields.${index}.required`) ? "Required" : "Optional"}
+                  </span>
                   <PillToggle
                     size="sm"
                     pressed={watch(`customFields.${index}.required`)}
                     onPressedChange={(v) => setValue(`customFields.${index}.required`, v)}
-                    srLabel={watch(`customFields.${index}.required`) ? "Mark field as optional" : "Mark field as required"}
-                  />
-                  <span className="text-xs text-slate-500">Required</span>
-                  <FieldHelp
-                    text="If required, every event must include this field. Keep fields optional unless rules/analytics truly depend on them—required fields can break ingestion if a source forgets to send them."
-                    label="Custom field required help"
+                    srLabel={
+                      watch(`customFields.${index}.required`)
+                        ? "Turn off: mark custom field as optional"
+                        : "Turn on: mark custom field as required"
+                    }
                   />
                 </div>
+                <FieldHelp
+                  text="If required, every event must include this field. Keep fields optional unless rules/analytics truly depend on them—required fields can break ingestion if a source forgets to send them."
+                  label="Custom field required help"
+                />
                 <button
                   type="button"
                   onClick={() => removeCustomField(index)}
