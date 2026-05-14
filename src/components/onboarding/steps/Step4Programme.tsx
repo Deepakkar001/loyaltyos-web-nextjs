@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm, type Control, type UseFormRegister, type UseFormSetValue, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -510,6 +510,9 @@ export function Step4Programme() {
   const [creatingProgramme, setCreatingProgramme] = useState(false);
   type ConfigStep = 0 | 1 | 2 | 3;
   const [configStep, setConfigStep] = useState<ConfigStep>(0);
+  /** Prevents accidental form submit (e.g. Enter in inputs) before the final wizard step. */
+  const configStepRef = useRef<ConfigStep>(0);
+  configStepRef.current = configStep;
 
   const STEP_META: Array<{ title: string; subtitle: string }> = [
     {
@@ -845,6 +848,8 @@ export function Step4Programme() {
 
   const onSubmit = async (data: FormData) => {
     if (!tenantId) return;
+    // Only the explicit "Save Configuration" action should persist. Enter in inputs must not trigger save.
+    if (configStepRef.current !== 3) return;
     setSubmitting(true);
     try {
       // 1) Legacy save (required for onboarding state + tier_definitions). Applies to default programme.
@@ -1142,7 +1147,12 @@ export function Step4Programme() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+      <form
+        className="space-y-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
         {/* Configure stepper */}
         <div className="rounded-2xl border border-border/70 bg-card/60 p-3 sm:p-4">
           <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -2002,10 +2012,14 @@ export function Step4Programme() {
             </Button>
           ) : (
             <Button
-              type="submit"
+              type="button"
               size="lg"
               disabled={isSubmitting}
               className="bg-brand-600 hover:bg-brand-700 text-white min-w-[180px]"
+              onClick={() => {
+                if (configStep !== 3) return;
+                void handleSubmit(onSubmit, onInvalid)();
+              }}
             >
               {isSubmitting ? "Saving…" : "Save Configuration"}
             </Button>
