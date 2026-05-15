@@ -41,14 +41,8 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import toast from "react-hot-toast";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 
 type NavItem = {
   href: string;
@@ -197,6 +191,15 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+const LOCATION_FILTER_OPTIONS = [
+  { value: "all", label: "All Locations" },
+  { value: "north", label: "North Region" },
+  { value: "south", label: "South Region" },
+  { value: "delhi", label: "Delhi Central" },
+  { value: "mumbai", label: "Mumbai Fort" },
+  { value: "bangalore", label: "Bangalore" },
+] as const;
+
 function TopControls() {
   const [location, setLocation] = useState("all");
   const [datePreset, setDatePreset] = useState("last-30");
@@ -221,19 +224,14 @@ function TopControls() {
   return (
     <>
       <div className="flex items-center gap-2">
-        <Select value={location} onValueChange={(value) => setLocation(value ?? "all")}>
-          <SelectTrigger className="w-[170px] h-9 rounded-full px-4 bg-[var(--surface-sunken)] border-0" aria-label="Filter by location">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Locations</SelectItem>
-            <SelectItem value="north">North Region</SelectItem>
-            <SelectItem value="south">South Region</SelectItem>
-            <SelectItem value="delhi">Delhi Central</SelectItem>
-            <SelectItem value="mumbai">Mumbai Fort</SelectItem>
-            <SelectItem value="bangalore">Bangalore</SelectItem>
-          </SelectContent>
-        </Select>
+        <NativeSelect
+          className="w-[220px] shrink-0"
+          ariaLabel="Filter by location"
+          value={location}
+          onChange={setLocation}
+          options={[...LOCATION_FILTER_OPTIONS]}
+          variant="compact"
+        />
 
         <Button
           variant="outline"

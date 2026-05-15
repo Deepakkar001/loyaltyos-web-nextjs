@@ -63,7 +63,8 @@ function SelectContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  /** `false` avoids menu opening under cursor without a prior hover (Base UI mouse selection needs highlight). */
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
