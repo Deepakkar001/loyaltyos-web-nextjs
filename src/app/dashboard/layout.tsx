@@ -5,12 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
-  CalendarRange,
   CircleHelp,
-  Cog,
   DatabaseZap,
   Download,
-  FlaskConical,
   GitBranchPlus,
   HandCoins,
   Headset,
@@ -18,7 +15,6 @@ import {
   LayoutGrid,
   Menu,
   Plug,
-  RefreshCw,
   Rocket,
   Search,
   Settings,
@@ -38,11 +34,8 @@ import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { ensureAuthSession, onboardingApi } from "@/lib/api/client";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import toast from "react-hot-toast";
-import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
 
 type NavItem = {
   href: string;
@@ -76,8 +69,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/loyalty-rules/create/basic-info", label: "Create Rule", icon: GitBranchPlus },
       { href: "/dashboard/loyalty-rules/my-rules", label: "My Rules", icon: Search },
-      { href: "/dashboard/loyalty-rules/performance", label: "Rule Performance", icon: BarChart3 },
-      { href: "/dashboard/loyalty-rules/simulation", label: "Simulation Tool", icon: FlaskConical },
     ],
   },
   {
@@ -101,7 +92,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Settings",
     items: [
       { href: "/dashboard/profile", label: "Your Profile", icon: User },
-      { href: "/dashboard/settings/account", label: "Account Settings", icon: Cog },
       { href: "/dashboard/settings/team", label: "Team & Permissions", icon: Users },
       { href: "/dashboard/settings/integrations", label: "Integrations", icon: Plug },
       { href: "/dashboard/settings/billing", label: "Billing & Plan", icon: HandCoins },
@@ -191,165 +181,6 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-const LOCATION_FILTER_OPTIONS = [
-  { value: "all", label: "All Locations" },
-  { value: "north", label: "North Region" },
-  { value: "south", label: "South Region" },
-  { value: "delhi", label: "Delhi Central" },
-  { value: "mumbai", label: "Mumbai Fort" },
-  { value: "bangalore", label: "Bangalore" },
-] as const;
-
-function TopControls() {
-  const [location, setLocation] = useState("all");
-  const [datePreset, setDatePreset] = useState("last-30");
-  const [dateDialogOpen, setDateDialogOpen] = useState(false);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = setInterval(() => setLastUpdated(new Date()), 30000);
-    return () => clearInterval(id);
-  }, [autoRefresh]);
-
-  const nextRefreshSeconds = useMemo(() => {
-    if (!autoRefresh) return null;
-    const diff = 30 - (Math.floor((Date.now() - lastUpdated.getTime()) / 1000) % 30);
-    return diff;
-  }, [autoRefresh, lastUpdated]);
-
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        <NativeSelect
-          className="w-[220px] shrink-0"
-          ariaLabel="Filter by location"
-          value={location}
-          onChange={setLocation}
-          options={[...LOCATION_FILTER_OPTIONS]}
-          variant="compact"
-        />
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 rounded-full px-4 bg-[var(--surface-sunken)] border-0"
-          onClick={() => setDateDialogOpen(true)}
-          aria-label="Open date range picker"
-        >
-          <CalendarRange className="h-4 w-4 mr-2" />
-          {datePreset === "last-7"
-            ? "Last 7 Days"
-            : datePreset === "last-30"
-              ? "Last 30 Days"
-              : datePreset === "last-90"
-                ? "Last 90 Days"
-                : datePreset === "last-12m"
-                  ? "Last 12 Months"
-                  : "Custom Range"}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 w-9 p-0 border-0 bg-transparent text-muted-foreground hover:text-foreground"
-          onClick={() => setLastUpdated(new Date())}
-          aria-label="Refresh dashboard data"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="hidden xl:flex items-center gap-3 text-xs text-muted-foreground">
-        <button
-          type="button"
-          className={cn(
-            "px-2.5 py-1 rounded-full transition-colors",
-            autoRefresh
-              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-medium"
-              : "bg-[var(--surface-sunken)] text-muted-foreground text-xs font-medium"
-          )}
-          onClick={() => setAutoRefresh((v) => !v)}
-          aria-pressed={autoRefresh}
-        >
-          Auto-Refresh: {autoRefresh ? "ON" : "OFF"}
-        </button>
-        <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
-        {autoRefresh && <span>Next update: {nextRefreshSeconds}s</span>}
-      </div>
-
-      <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Select Date Range</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={datePreset === "last-7" ? "default" : "outline"}
-                className={cn(datePreset !== "last-7" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-7")}
-              >
-                Last 7 Days
-              </Button>
-              <Button
-                variant={datePreset === "last-30" ? "default" : "outline"}
-                className={cn(datePreset !== "last-30" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-30")}
-              >
-                Last 30 Days
-              </Button>
-              <Button
-                variant={datePreset === "last-90" ? "default" : "outline"}
-                className={cn(datePreset !== "last-90" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-90")}
-              >
-                Last 90 Days
-              </Button>
-              <Button
-                variant={datePreset === "last-12m" ? "default" : "outline"}
-                className={cn(datePreset !== "last-12m" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-12m")}
-              >
-                Last 12 Months
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label htmlFor="fromDate" className="text-xs text-muted-foreground">From</label>
-                <Input id="fromDate" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="toDate" className="text-xs text-muted-foreground">To</label>
-                <Input id="toDate" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                className="border-0 rounded-full bg-[var(--surface-sunken)] hover:bg-[var(--accent-primary-soft)] hover:text-[var(--accent-primary)]"
-                onClick={() => setDateDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  if (fromDate && toDate) setDatePreset("custom");
-                  setDateDialogOpen(false);
-                }}
-              >
-                Apply
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 
 export default function TenantDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -607,18 +438,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
                 Here’s a quick loyalty health check — and deep dives when needed.
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <TopControls />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 w-9 p-0 border-0 bg-transparent text-muted-foreground hover:text-foreground"
-                aria-label="Open settings"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
           </div>
         </div>
 

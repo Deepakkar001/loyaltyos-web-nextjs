@@ -92,9 +92,20 @@ const COUNTRY_EMOJI: Record<string, string> = {
 interface Step1AccountProps {
   editMode?: boolean;
   onContinue?: () => void;
+  /** Dashboard profile page: same form + PATCH /me/profile, no onboarding navigation */
+  embeddedProfile?: boolean;
+  onProfileSaved?: () => void;
+  onCancelEdit?: () => void;
 }
 
-export function Step1Account({ editMode = false, onContinue }: Step1AccountProps) {
+export function Step1Account({
+  editMode = false,
+  onContinue,
+  embeddedProfile = false,
+  onProfileSaved,
+  onCancelEdit,
+}: Step1AccountProps) {
+  const isProfileEdit = editMode || embeddedProfile;
   const {
     setTenantId, setRegistrationData, syncStatusFromBackend, setAccessToken,
     setSubmitting, isSubmitting, setSubmitError, email: storeEmail,
@@ -107,7 +118,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
   const [revenueOptions, setRevenueOptions] = useState<OnboardingSelectOption[]>([]);
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<OnboardingSelectOption[]>([]);
   const [metadataLoading, setMetadataLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(editMode);
+  const [profileLoading, setProfileLoading] = useState(isProfileEdit);
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState("");
@@ -129,7 +140,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
 
   const registerForm = useForm<RegisterFormData>({ resolver: zodResolver(registerSchema) });
   const editForm = useForm<EditFormData>({ resolver: zodResolver(editSchema) });
-  const form = (editMode ? editForm : registerForm) as unknown as UseFormReturn<FieldValues>;
+  const form = (isProfileEdit ? editForm : registerForm) as unknown as UseFormReturn<FieldValues>;
   const { register, handleSubmit, control, setValue, watch, formState: { errors }, reset } = form;
 
   const timezoneValue = watch("timezone", "");
@@ -168,7 +179,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
   }, []);
 
   useEffect(() => {
-    if (!editMode) return;
+    if (!isProfileEdit) return;
     let mounted = true;
     (async () => {
       try {
@@ -217,7 +228,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
       }
     })();
     return () => { mounted = false; };
-  }, [editMode, reset]);
+  }, [isProfileEdit, reset]);
 
   const togglePayment = (method: string) => {
     setSelectedPayments((prev) => {
@@ -299,7 +310,11 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
       await onboardingApi.updateMyProfile(buildProfilePayload(data));
       setRegistrationData({ companyName: data.companyName });
       toast.success("Profile updated successfully.");
-      onContinue?.();
+      if (embeddedProfile) {
+        onProfileSaved?.();
+      } else {
+        onContinue?.();
+      }
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
       else toast.error("Failed to save changes. Please try again.");
@@ -309,7 +324,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
   };
 
   const submitHandler = async (values: FieldValues) => {
-    if (editMode) {
+    if (isProfileEdit) {
       await onEditSubmit(values as EditFormData);
       return;
     }
@@ -379,17 +394,19 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
 
   return (
     <div>
-      <StepHeader
-        badge={editMode ? "Editing Step 1" : "Step 1 of 3"}
-        title={editMode ? "Edit account details" : "Set up your account"}
-        description={
-          editMode
-            ? "Review and update your company information and contact details."
-            : "Create your LoyaltyOS account with your company profile."
-        }
-      />
+      {!embeddedProfile ? (
+        <StepHeader
+          badge={editMode ? "Editing Step 1" : "Step 1 of 3"}
+          title={editMode ? "Edit account details" : "Set up your account"}
+          description={
+            editMode
+              ? "Review and update your company information and contact details."
+              : "Create your LoyaltyOS account with your company profile."
+          }
+        />
+      ) : null}
 
-      {editMode && (
+      {editMode && !embeddedProfile && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-8">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
@@ -445,7 +462,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
             </FormField>
           )}
 
-          {editMode && industryModeration && industryModeration.status === "PENDING_REVIEW" && (
+          {isProfileEdit && industryModeration && industryModeration.status === "PENDING_REVIEW" && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
               <p className="text-sm font-semibold text-amber-900">
                 Industry awaiting admin review
@@ -458,7 +475,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
             </div>
           )}
 
-          {editMode && industryModeration && industryModeration.status === "REJECTED" && (
+          {isProfileEdit && industryModeration && industryModeration.status === "REJECTED" && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3">
               <p className="text-sm font-semibold text-red-900">Industry suggestion rejected</p>
               <p className="text-xs text-red-800 mt-1">
@@ -541,7 +558,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
         </div>
 
         {/* ── Login Credentials (register only) ── */}
-        {!editMode && (
+        {!isProfileEdit && (
           <div className="space-y-5 pt-2">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Login Credentials</h3>
             <FormField label="Business Email" htmlFor="email" error={errors.email?.message as string} required>
@@ -558,7 +575,7 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
           </div>
         )}
 
-        {editMode && storeEmail && (
+        {isProfileEdit && storeEmail && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold mb-2">Login Email (read-only)</p>
             <p className="text-sm text-slate-700 font-medium">{storeEmail}</p>
@@ -587,14 +604,27 @@ export function Step1Account({ editMode = false, onContinue }: Step1AccountProps
           </div>
         </div>
 
-        <StepActions
-          onNext={handleSubmit(submitHandler)}
-          isLoading={editMode ? saving : isSubmitting}
-          nextLabel={editMode ? "Save & Continue" : "Create Account"}
-        />
+        {embeddedProfile ? (
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            {onCancelEdit ? (
+              <Button type="button" variant="outline" className="rounded-full" onClick={onCancelEdit} disabled={saving}>
+                Cancel
+              </Button>
+            ) : null}
+            <Button type="submit" className="rounded-full" disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        ) : (
+          <StepActions
+            onNext={handleSubmit(submitHandler)}
+            isLoading={editMode ? saving : isSubmitting}
+            nextLabel={editMode ? "Save & Continue" : "Create Account"}
+          />
+        )}
       </form>
 
-      {!editMode && (
+      {!isProfileEdit && (
         <Dialog
           open={verifyOpen}
           onOpenChange={(open) => {
