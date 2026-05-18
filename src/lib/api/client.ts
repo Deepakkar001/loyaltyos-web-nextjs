@@ -24,11 +24,22 @@ import {
   CampaignStatus,
   CampaignUpsertRequest,
 } from "@/types/campaigns";
+import type {
+  CohortRetentionRow,
+  PointsActivityRow,
+  RuleEffectivenessRow,
+  RulePerformanceRow,
+  SegmentAnalysisRow,
+  TierDistributionRow,
+  TierUpgradeCohortRow,
+  TierVelocityBucketRow,
+} from "@/types/analytics";
+import { getApiBaseUrl } from "@/lib/api/get-api-base-url";
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   timeout: 15000,
   withCredentials: true, // required for HttpOnly refresh cookie
   headers: {
@@ -616,6 +627,139 @@ export const campaignsAdminApi = {
         { params: { limit } }
       );
       return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+// ─── Analytics (tenant dashboard) ─────────────────────────────────────────────
+
+export const analyticsApi = {
+  getPointsActivity: async (from: string, to: string, programmeUid = "default"): Promise<PointsActivityRow[]> => {
+    try {
+      const res = await apiClient.get<PointsActivityRow[]>("/api/v1/analytics/points-activity", {
+        params: { from, to, programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getRulePerformance: async (from: string, to: string, programmeUid = "default"): Promise<RulePerformanceRow[]> => {
+    try {
+      const res = await apiClient.get<RulePerformanceRow[]>("/api/v1/analytics/rule-performance", {
+        params: { from, to, programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getTierDistribution: async (programmeUid = "default"): Promise<TierDistributionRow[]> => {
+    try {
+      const res = await apiClient.get<TierDistributionRow[]>("/api/v1/analytics/tier-distribution", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getEngagementSegments: async (programmeUid = "default"): Promise<SegmentAnalysisRow[]> => {
+    try {
+      const res = await apiClient.get<SegmentAnalysisRow[]>("/api/v1/analytics/segments/engagement", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getBalanceBrackets: async (programmeUid = "default"): Promise<SegmentAnalysisRow[]> => {
+    try {
+      const res = await apiClient.get<SegmentAnalysisRow[]>("/api/v1/analytics/segments/balance-brackets", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getRetentionCohort: async (programmeUid = "default"): Promise<CohortRetentionRow[]> => {
+    try {
+      const res = await apiClient.get<CohortRetentionRow[]>("/api/v1/analytics/cohorts/retention", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getTierUpgradeCohort: async (programmeUid = "default"): Promise<TierUpgradeCohortRow[]> => {
+    try {
+      const res = await apiClient.get<TierUpgradeCohortRow[]>("/api/v1/analytics/cohorts/tier-upgrade", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getTierVelocity: async (tierName: string, programmeUid = "default"): Promise<TierVelocityBucketRow[]> => {
+    try {
+      const res = await apiClient.get<TierVelocityBucketRow[]>("/api/v1/analytics/cohorts/tier-velocity", {
+        params: { tierName, programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getRuleEffectiveness: async (
+    ruleUid: string,
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<RuleEffectivenessRow[]> => {
+    try {
+      const res = await apiClient.get<RuleEffectivenessRow[]>("/api/v1/analytics/cohorts/rule-effectiveness", {
+        params: { ruleUid, from, to, programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  downloadExport: async (path: string, params: Record<string, string>, filename: string): Promise<void> => {
+    try {
+      const res = await apiClient.get(`/api/v1/analytics/export/${path}`, {
+        params,
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  downloadRuleConfig: async (programmeUid = "default", filename = "rule-config.json"): Promise<void> => {
+    try {
+      const res = await apiClient.get("/api/v1/analytics/export/rule-config", {
+        params: { programmeUid },
+      });
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);
     }

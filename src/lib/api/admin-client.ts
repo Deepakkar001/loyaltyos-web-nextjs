@@ -11,9 +11,10 @@ import {
   BusinessCategoryStatus,
   PendingAgreementListItem,
 } from "@/types/onboarding";
+import { getApiBaseUrl } from "@/lib/api/get-api-base-url";
 
 const adminClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   timeout: 15000,
   headers: { "Content-Type": "application/json" },
 });

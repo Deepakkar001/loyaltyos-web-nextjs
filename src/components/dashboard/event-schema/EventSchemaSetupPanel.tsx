@@ -21,7 +21,6 @@ import {
   mergeEventSchemaIntoProgrammeConfig,
   type EventSchemaCoreFieldDraft,
   type EventSchemaCustomFieldDraft,
-  type EventSchemaDefinitionDraft,
   type EventSchemaDraft,
   type EventSchemaFieldType,
 } from "@/lib/programme/event-schema-merge";
