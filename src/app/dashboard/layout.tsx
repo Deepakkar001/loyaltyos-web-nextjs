@@ -83,7 +83,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Campaigns",
     items: [
-      { href: "/dashboard/campaigns/active", label: "Active Campaigns", icon: Megaphone },
+      { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/dashboard/campaigns/create", label: "Create Campaign", icon: GitBranchPlus },
       { href: "/dashboard/campaigns/reports", label: "Campaign Reports", icon: Download },
     ],

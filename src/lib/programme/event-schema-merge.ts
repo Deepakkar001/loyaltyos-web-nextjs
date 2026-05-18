@@ -157,6 +157,47 @@ export function eventSchemaDraftFromConfigRoot(configRoot: unknown): EventSchema
   };
 }
 
+/**
+ * Lists trigger event types from `programme_config.config` / `eventSchema` only.
+ * Uses `eventDefinitions[].eventType` (same as configure programme UI). Legacy configs with
+ * only `standardFields` expose a single `PURCHASE` type. No hardcoded fallback list.
+ */
+export function extractEventTypesFromProgrammeConfig(
+  configRoot: unknown,
+  preserveExact: readonly string[] = []
+): string[] {
+  const root = safeRecord(configRoot);
+  const eventSchema = safeRecord(root.eventSchema);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (t: string) => {
+    const s = t.trim();
+    if (!s || seen.has(s)) return;
+    seen.add(s);
+    out.push(s);
+  };
+
+  const eds = safeArr(eventSchema.eventDefinitions);
+  for (const raw of eds) {
+    const o = safeRecord(raw);
+    const eventType = String(o.eventType ?? "").trim();
+    if (eventType) push(eventType);
+  }
+
+  if (out.length === 0) {
+    const std = safeArr(eventSchema.standardFields);
+    if (std.length > 0) {
+      push("PURCHASE");
+    }
+  }
+
+  for (const p of preserveExact) {
+    if (typeof p === "string" && p.trim()) push(p);
+  }
+
+  return out;
+}
+
 export function buildEventSchemaJsonNode(draft: EventSchemaDraft): Record<string, unknown> {
   const evDefs = draft.eventDefinitions.map((d) => ({
     eventType: d.eventType.trim(),

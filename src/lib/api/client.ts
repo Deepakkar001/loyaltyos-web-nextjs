@@ -17,6 +17,13 @@ import {
 import { getAccessToken, setAccessToken as setSessionAccessToken, clearSession } from "@/lib/auth/session";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { EarnRuleDetailResponse, EarnRuleResponse, RuleChangeLogResponse, RuleStatus, RuleUpsertRequest } from "@/types/rules";
+import {
+  CampaignParticipationResponse,
+  CampaignResponse,
+  CampaignStatsResponse,
+  CampaignStatus,
+  CampaignUpsertRequest,
+} from "@/types/campaigns";
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
@@ -513,6 +520,102 @@ export const loyaltyRulesAdminApi = {
       await apiClient.delete(`/api/v1/engine/rule/admin/rules/${encodeURIComponent(ruleUid)}`, {
         params: { programmeUid },
       });
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+// ─── Campaign admin ───────────────────────────────────────────────────────────
+
+export const campaignsAdminApi = {
+  listCampaigns: async (params?: {
+    programmeUid?: string;
+    status?: CampaignStatus;
+  }): Promise<CampaignResponse[]> => {
+    try {
+      const res = await apiClient.get<CampaignResponse[]>("/api/v1/campaigns/admin/campaigns", { params });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getCampaign: async (campaignUid: string): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.get<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  createCampaign: async (payload: CampaignUpsertRequest): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.post<CampaignResponse>("/api/v1/campaigns/admin/campaigns", payload);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  updateCampaign: async (campaignUid: string, payload: CampaignUpsertRequest): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.put<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}`,
+        payload
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  activateCampaign: async (campaignUid: string): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.post<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/activate`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  pauseCampaign: async (campaignUid: string): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.post<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/pause`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  endCampaign: async (campaignUid: string): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.post<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/end`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getStats: async (campaignUid: string): Promise<CampaignStatsResponse> => {
+    try {
+      const res = await apiClient.get<CampaignStatsResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/stats`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  listParticipations: async (campaignUid: string, limit = 50): Promise<CampaignParticipationResponse[]> => {
+    try {
+      const res = await apiClient.get<CampaignParticipationResponse[]>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/participations`,
+        { params: { limit } }
+      );
+      return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);
     }

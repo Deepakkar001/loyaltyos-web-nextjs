@@ -137,7 +137,7 @@ export default function CreateRuleBasicInfoPage() {
         setEventTypes(types);
         const current = form.getValues("triggerEventType");
         if (!types.includes(current)) {
-          form.setValue("triggerEventType", types[0] ?? "PURCHASE", { shouldValidate: true });
+          form.setValue("triggerEventType", types[0] ?? "", { shouldValidate: true });
         }
       } catch (e) {
         if (cancelled) return;
@@ -145,7 +145,7 @@ export default function CreateRuleBasicInfoPage() {
         setEventTypes(types);
         const current = form.getValues("triggerEventType");
         if (!types.includes(current)) {
-          form.setValue("triggerEventType", types[0] ?? "PURCHASE", { shouldValidate: true });
+          form.setValue("triggerEventType", types[0] ?? "", { shouldValidate: true });
         }
         if (e instanceof ApiError) toast.error(e.message);
       } finally {
