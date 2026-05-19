@@ -22,6 +22,7 @@ const STATUS_OPTIONS: Array<{ value: CampaignStatus | "ALL"; label: string }> = 
   { value: "ACTIVE", label: "Active" },
   { value: "PAUSED", label: "Paused" },
   { value: "EXHAUSTED", label: "Exhausted" },
+  { value: "EXPIRED", label: "Expired" },
   { value: "ENDED", label: "Ended" },
 ];
 

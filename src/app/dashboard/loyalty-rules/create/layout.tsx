@@ -5,6 +5,8 @@
  */
 import "reactflow/dist/style.css";
 
+import { RuleCreateFlowProvider } from "./_components/rule-create-flow";
+
 export default function CreateRuleLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <RuleCreateFlowProvider kind="programme">{children}</RuleCreateFlowProvider>;
 }

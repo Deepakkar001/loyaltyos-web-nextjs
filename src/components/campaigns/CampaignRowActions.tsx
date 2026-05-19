@@ -36,7 +36,11 @@ export function CampaignRowActions({ campaign, onUpdated }: CampaignRowActionsPr
   const canEdit = campaign.status === "DRAFT";
   const canActivate = campaign.status === "DRAFT" || campaign.status === "PAUSED";
   const canPause = campaign.status === "ACTIVE";
-  const canEnd = campaign.status !== "ENDED" && campaign.status !== "EXHAUSTED";
+  const isTerminal =
+    campaign.status === "ENDED" ||
+    campaign.status === "EXHAUSTED" ||
+    campaign.status === "EXPIRED";
+  const canEnd = !isTerminal;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-1">

@@ -163,6 +163,7 @@ export default function CreateRuleBasicInfoPage() {
       return;
     }
     saveRuleDraftFields(tenantId, {
+      ruleType: "PROGRAMME",
       programmeUid: data.programmeUid ?? "default",
       name: data.name,
       description: data.description,

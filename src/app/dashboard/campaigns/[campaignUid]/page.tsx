@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge";
 import { campaignsAdminApi } from "@/lib/api/client";
+import { formatTriggerEventTypesLabel } from "@/lib/campaigns/trigger-event-types";
 import type {
   CampaignParticipationResponse,
   CampaignResponse,
@@ -79,7 +80,8 @@ export default function CampaignDetailPage() {
               <h1 className="text-2xl font-bold tracking-tight">{campaign.name}</h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              {campaign.programmeUid} · {campaign.triggerEventType} · {campaign.campaignUid}
+              {campaign.programmeUid} · {formatTriggerEventTypesLabel(campaign.triggerEventType)} ·{" "}
+              {campaign.campaignUid}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -100,7 +102,9 @@ export default function CampaignDetailPage() {
                 Pause
               </Button>
             )}
-            {campaign.status !== "ENDED" && campaign.status !== "EXHAUSTED" && (
+            {campaign.status !== "ENDED" &&
+              campaign.status !== "EXHAUSTED" &&
+              campaign.status !== "EXPIRED" && (
               <Button variant="destructive" className="rounded-full" onClick={() => runAction("end")}>
                 End
               </Button>

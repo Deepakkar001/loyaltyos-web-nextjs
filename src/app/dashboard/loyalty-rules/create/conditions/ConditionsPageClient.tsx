@@ -14,8 +14,7 @@ import { toBackendConditionTree, type ConditionNode, type ConditionGroup, type C
 import { RuleFlowBuilder, type RuleFlowBuilderHandle } from "@/components/loyalty-rules/condition-flow/RuleFlowBuilder";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
-
-const CONDITIONS_PATH = "/dashboard/loyalty-rules/create/conditions";
+import { stepHref, useRuleCreateFlow } from "../_components/rule-create-flow";
 
 // ── Deep tree validation helpers ─────────────────────────────────────────────
 
@@ -79,6 +78,10 @@ function ModeToggle({
 }
 
 export default function ConditionsPageClient() {
+  const { basePath, draftScope, basicInfoStepSlug } = useRuleCreateFlow();
+  const conditionsPath = stepHref(basePath, "conditions");
+  const actionsPath = stepHref(basePath, "actions");
+  const basicInfoPath = stepHref(basePath, basicInfoStepSlug);
   const router = useRouter();
   const pathname = usePathname();
   const tenantId = useOnboardingStore((s) => s.tenantId) ?? "";
@@ -115,11 +118,11 @@ export default function ConditionsPageClient() {
   // if the effect ordering ever skips a run; pathname + layout timing fixes that.
   useLayoutEffect(() => {
     if (!tenantId || !storeHydrated) return;
-    if (!pathname.includes(CONDITIONS_PATH)) return;
+    if (!pathname.includes(conditionsPath)) return;
 
     setDiagramValid(false);
 
-    const existing = loadRuleDraft(tenantId);
+    const existing = loadRuleDraft(tenantId, draftScope);
     if (!existing) return;
 
     setEventType(existing.triggerEventType || "purchase");
@@ -140,28 +143,36 @@ export default function ConditionsPageClient() {
   // Autosave so users who jump via the step tabs (without clicking Next) do not lose work.
   useEffect(() => {
     if (!tenantId || !storeHydrated) return;
-    if (!pathname.includes(CONDITIONS_PATH)) return;
+    if (!pathname.includes(conditionsPath)) return;
 
     const t = window.setTimeout(() => {
-      const base = loadRuleDraft(tenantId);
+      const base = loadRuleDraft(tenantId, draftScope);
       if (!base?.name) return;
 
       if (uiMode === "diagram") {
         if (!diagramValid) return;
         const sync = ruleFlowRef.current?.computeCurrentTree();
         if (!sync || sync.hasErrors || !sync.hasConditionNodes || sync.tree.kind === "everyone") return;
-        saveRuleDraftFields(tenantId, {
-          conditionTree: toBackendConditionTree(sync.tree),
-          conditionUiMode: "diagram",
-        });
+        saveRuleDraftFields(
+          tenantId,
+          {
+            conditionTree: toBackendConditionTree(sync.tree),
+            conditionUiMode: "diagram",
+          },
+          draftScope
+        );
         return;
       }
 
       if (!isTreeValid(tree)) return;
-      saveRuleDraftFields(tenantId, {
-        conditionTree: toBackendConditionTree(tree),
-        conditionUiMode: "current",
-      });
+      saveRuleDraftFields(
+        tenantId,
+        {
+          conditionTree: toBackendConditionTree(tree),
+          conditionUiMode: "current",
+        },
+        draftScope
+      );
     }, 450);
     return () => window.clearTimeout(t);
   }, [tree, tenantId, uiMode, diagramValid, pathname, storeHydrated]);
@@ -169,9 +180,9 @@ export default function ConditionsPageClient() {
   const handleUiModeChange = useCallback(
     (m: "current" | "diagram") => {
       setUiMode(m);
-      if (tenantId) saveRuleDraftFields(tenantId, { conditionUiMode: m });
+      if (tenantId) saveRuleDraftFields(tenantId, { conditionUiMode: m }, draftScope);
     },
-    [tenantId]
+    [tenantId, draftScope]
   );
 
   const handleDiagramValidChange = useCallback((valid: boolean) => {
@@ -192,10 +203,10 @@ export default function ConditionsPageClient() {
       toast.error("Missing tenant session. Please re-login.");
       return;
     }
-    const existing = loadRuleDraft(tenantId);
+    const existing = loadRuleDraft(tenantId, draftScope);
     if (!existing || !existing.name) {
       toast.error("Rule draft not found. Start from Basic Info.");
-      router.push("/dashboard/loyalty-rules/create/basic-info");
+      router.push(basicInfoPath);
       return;
     }
 
@@ -229,8 +240,8 @@ export default function ConditionsPageClient() {
         return;
       }
       const conditionTree = toBackendConditionTree(sync.tree);
-      saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "diagram" });
-      router.push("/dashboard/loyalty-rules/create/actions");
+      saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "diagram" }, draftScope);
+      router.push(actionsPath);
       return;
     }
 
@@ -240,8 +251,8 @@ export default function ConditionsPageClient() {
       return;
     }
     const conditionTree = toBackendConditionTree(tree);
-    saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "current" });
-    router.push("/dashboard/loyalty-rules/create/actions");
+    saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "current" }, draftScope);
+    router.push(actionsPath);
   };
 
   // ── Diagram mode — edge-to-edge, no card padding ─────────────────────────
@@ -278,7 +289,7 @@ export default function ConditionsPageClient() {
               type="button"
               variant="outline"
               className="rounded-full"
-              onClick={() => router.push("/dashboard/loyalty-rules/create/basic-info")}
+              onClick={() => router.push(basicInfoPath)}
             >
               ← Back
             </Button>
@@ -322,7 +333,7 @@ export default function ConditionsPageClient() {
               type="button"
               variant="outline"
               className="rounded-full"
-              onClick={() => router.push("/dashboard/loyalty-rules/create/basic-info")}
+              onClick={() => router.push(basicInfoPath)}
             >
               ← Back
             </Button>

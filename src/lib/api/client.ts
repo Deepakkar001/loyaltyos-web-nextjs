@@ -467,9 +467,14 @@ export const goLiveApi = {
 // ─── Rule Engine (tenant admin) ───────────────────────────────────────────────
 
 export const loyaltyRulesAdminApi = {
-  listRules: async (programmeUid = "default"): Promise<EarnRuleResponse[]> => {
+  listRules: async (
+    programmeUid = "default",
+    ruleType?: "PROGRAMME" | "CAMPAIGN"
+  ): Promise<EarnRuleResponse[]> => {
     try {
-      const res = await apiClient.get<EarnRuleResponse[]>("/api/v1/engine/rule/admin/rules", { params: { programmeUid } });
+      const res = await apiClient.get<EarnRuleResponse[]>("/api/v1/engine/rule/admin/rules", {
+        params: { programmeUid, ...(ruleType ? { ruleType } : {}) },
+      });
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);

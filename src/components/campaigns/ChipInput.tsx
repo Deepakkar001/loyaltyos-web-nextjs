@@ -14,6 +14,8 @@ type ChipInputProps = {
   values: string[];
   onChange: (next: string[]) => void;
   normalize?: (raw: string) => string;
+  /** When set to 1, adding a new chip replaces the existing value (e.g. single event type). */
+  maxItems?: number;
   className?: string;
 };
 
@@ -24,6 +26,7 @@ export function ChipInput({
   values,
   onChange,
   normalize = (s) => s.trim(),
+  maxItems,
   className,
 }: ChipInputProps) {
   const [draft, setDraft] = useState("");
@@ -36,7 +39,11 @@ export function ChipInput({
       setDraft("");
       return;
     }
-    onChange([...values, token]);
+    if (maxItems === 1) {
+      onChange([token]);
+    } else {
+      onChange([...values, token]);
+    }
     setDraft("");
   };
 

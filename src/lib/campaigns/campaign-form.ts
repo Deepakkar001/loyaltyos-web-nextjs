@@ -1,52 +1,46 @@
 import type {
-  CampaignAwardType,
+  CampaignOfferConfig,
   CampaignResponse,
+  CampaignTargetSegment,
   CampaignUpsertRequest,
-  StackMode,
 } from "@/types/campaigns";
+import {
+  CAMPAIGN_DEFAULT_OFFER,
+  CAMPAIGN_DEFAULT_PROGRAMME_UID,
+  CAMPAIGN_DEFAULT_TYPE,
+} from "@/lib/campaigns/campaign-constants";
+import {
+  formatTriggerEventTypes,
+  parseTriggerEventTypes,
+} from "@/lib/campaigns/trigger-event-types";
+
+export {
+  formatTriggerEventTypesLabel,
+  parseTriggerEventTypes,
+} from "@/lib/campaigns/trigger-event-types";
 
 export const CAMPAIGN_APPROVAL_BUDGET_THRESHOLD = 100_000;
 
-export const STACK_MODE_OPTIONS: Array<{ value: StackMode; label: string }> = [
-  { value: "ADDITIVE", label: "Additive" },
-  { value: "BEST_OFFER", label: "Best offer" },
-  { value: "FIRST_MATCH", label: "First match" },
-];
-
-export const AWARD_TYPE_OPTIONS: Array<{ value: CampaignAwardType; label: string }> = [
-  { value: "POINTS_BONUS", label: "Points bonus" },
-  { value: "MULTIPLIER_ON_RULE_POINTS", label: "Multiplier on rule points" },
-  { value: "FLAT_CASHBACK", label: "Flat cashback" },
-  { value: "PERCENT_CASHBACK", label: "Percent cashback" },
-];
+export const CAMPAIGN_FIELD_PLACEHOLDERS = {
+  name: "e.g. Winter Sale 2026",
+  description: "Internal notes or customer-facing copy",
+  eventType: "e.g. PURCHASE — type and press Enter to add each event",
+  validFrom: "Campaign start date & time",
+  validUntil: "Campaign end date & time",
+  validFromHint: "e.g. 2026-12-01 09:00 (must be before valid until)",
+  validUntilHint: "e.g. 2027-01-31 23:59 (must be after valid from)",
+  budgetTotal: "e.g. 100000",
+  alertThresholdPct: "e.g. 80",
+} as const;
 
 export type CampaignFormState = {
-  programmeUid: string;
   name: string;
   description: string;
-  campaignType: string;
-  occasionTags: string[];
   validFromLocal: string;
   validUntilLocal: string;
   triggerEventType: string;
-  selectedTiers: string[];
-  selectedChannels: string[];
-  minAmount: string;
-  countries: string[];
-  awardType: CampaignAwardType;
-  bonusPoints: string;
-  multiplier: string;
-  cashbackValue: string;
-  expiryDays: string;
-  stackableWithRules: boolean;
   budgetTotal: string;
   alertThresholdPct: string;
-  maxParticipations: string;
-  maxPerCustomer: string;
-  globalRewardCap: string;
-  mutualExclGroup: string;
-  stackMode: StackMode;
-  priority: string;
 };
 
 export function datetimeLocalToIso(local: string): string {
@@ -62,121 +56,72 @@ export function isoToDatetimeLocal(iso: string | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function parseOccasionTags(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((s) => s.trim());
-}
-
 export function campaignToFormState(c: CampaignResponse): CampaignFormState {
-  const offer = c.offerConfig;
-  const seg = c.targetSegment;
-  const awardType = (offer?.awardType ?? "POINTS_BONUS") as CampaignAwardType;
-
   return {
-    programmeUid: c.programmeUid,
     name: c.name ?? "",
     description: c.description ?? "",
-    campaignType: c.campaignType ?? "",
-    occasionTags: parseOccasionTags(c.occasionTags),
     validFromLocal: isoToDatetimeLocal(c.validFrom),
     validUntilLocal: isoToDatetimeLocal(c.validUntil),
     triggerEventType: c.triggerEventType ?? "",
-    selectedTiers: seg?.tierUids ?? [],
-    selectedChannels: seg?.channels ?? [],
-    minAmount: seg?.minAmount != null ? String(seg.minAmount) : "",
-    countries: seg?.countries ?? [],
-    awardType,
-    bonusPoints: offer?.bonusPoints != null ? String(offer.bonusPoints) : "50",
-    multiplier: offer?.multiplierOnRulePoints != null ? String(offer.multiplierOnRulePoints) : "2",
-    cashbackValue: offer?.cashbackValue != null ? String(offer.cashbackValue) : "10",
-    expiryDays: offer?.expiryDays != null ? String(offer.expiryDays) : "",
-    stackableWithRules: offer?.stackableWithRules !== false,
     budgetTotal: String(c.budgetTotal ?? ""),
     alertThresholdPct: c.alertThresholdPct != null ? String(c.alertThresholdPct) : "80",
-    maxParticipations: c.maxParticipations != null ? String(c.maxParticipations) : "",
-    maxPerCustomer: c.maxPerCustomer != null ? String(c.maxPerCustomer) : "",
-    globalRewardCap: c.globalRewardCap != null ? String(c.globalRewardCap) : "",
-    mutualExclGroup: c.mutualExclGroup ?? "",
-    stackMode: c.stackMode ?? "ADDITIVE",
-    priority: c.priority != null ? String(c.priority) : "0",
   };
 }
 
-export function defaultCreateFormState(programmeUid = ""): CampaignFormState {
+export function defaultCreateFormState(): CampaignFormState {
   return {
-    programmeUid,
     name: "",
     description: "",
-    campaignType: "",
-    occasionTags: [],
     validFromLocal: "",
     validUntilLocal: "",
     triggerEventType: "",
-    selectedTiers: [],
-    selectedChannels: [],
-    minAmount: "",
-    countries: [],
-    awardType: "POINTS_BONUS",
-    bonusPoints: "50",
-    multiplier: "2",
-    cashbackValue: "10",
-    expiryDays: "",
-    stackableWithRules: true,
     budgetTotal: "10000",
     alertThresholdPct: "80",
-    maxParticipations: "",
-    maxPerCustomer: "",
-    globalRewardCap: "",
-    mutualExclGroup: "",
-    stackMode: "ADDITIVE",
-    priority: "0",
   };
 }
 
 export type BuildPayloadContext = {
-  tierOptions: Array<{ tierUid: string; label: string }>;
+  /** Edit only — programme cannot change in UI but must be sent on update. */
+  programmeUid?: string;
+  /** Edit only — keep existing offer when UI does not collect offer fields. */
+  preserveOfferConfig?: CampaignOfferConfig;
+  preserveTargetSegment?: CampaignTargetSegment;
 };
 
 export type BuildPayloadResult =
   | { ok: true; payload: CampaignUpsertRequest }
   | { ok: false; error: string };
 
+function resolveOfferConfig(ctx: BuildPayloadContext): CampaignOfferConfig {
+  const src = ctx.preserveOfferConfig;
+  if (src?.awardType) {
+    return {
+      awardType: src.awardType,
+      bonusPoints: src.bonusPoints,
+      multiplierOnRulePoints: src.multiplierOnRulePoints,
+      cashbackValue: src.cashbackValue,
+      expiryDays: src.expiryDays,
+      stackableWithRules: src.stackableWithRules !== false,
+    };
+  }
+  return { ...CAMPAIGN_DEFAULT_OFFER };
+}
+
 export function buildCampaignUpsertPayload(
   state: CampaignFormState,
   ctx: BuildPayloadContext
 ): BuildPayloadResult {
   const {
-    programmeUid,
     name,
     description,
-    campaignType,
-    occasionTags,
     validFromLocal,
     validUntilLocal,
     triggerEventType,
-    selectedTiers,
-    selectedChannels,
-    minAmount,
-    countries,
-    awardType,
-    bonusPoints,
-    multiplier,
-    cashbackValue,
-    expiryDays,
-    stackableWithRules,
     budgetTotal,
     alertThresholdPct,
-    maxParticipations,
-    maxPerCustomer,
-    globalRewardCap,
-    mutualExclGroup,
-    stackMode,
-    priority,
   } = state;
 
-  if (!programmeUid) return { ok: false, error: "Select a programme" };
   if (!name.trim()) return { ok: false, error: "Campaign name is required" };
-  if (!campaignType.trim()) return { ok: false, error: "Campaign type is required" };
   if (!validFromLocal || !validUntilLocal) {
     return { ok: false, error: "Valid from and valid until are required" };
   }
@@ -186,89 +131,80 @@ export function buildCampaignUpsertPayload(
   if (new Date(untilIso).getTime() <= new Date(fromIso).getTime()) {
     return {
       ok: false,
-      error:
-        "Valid until must be later than valid from. Check that the end date/year is after the start.",
+      error: "Valid until must be later than valid from.",
     };
   }
-  if (!triggerEventType) return { ok: false, error: "Trigger event type is required" };
+  const eventTypes = parseTriggerEventTypes(triggerEventType);
+  if (eventTypes.length === 0) return { ok: false, error: "At least one event type is required" };
 
   const budget = Number(budgetTotal);
   if (!Number.isFinite(budget) || budget <= 0) {
     return { ok: false, error: "Total budget must be greater than zero" };
   }
 
-  const offerConfig: CampaignUpsertRequest["offerConfig"] = {
-    awardType,
-    stackableWithRules,
-  };
-
-  if (awardType === "POINTS_BONUS") {
-    const pts = Number(bonusPoints);
-    if (!Number.isFinite(pts) || pts <= 0) {
-      return { ok: false, error: "Bonus points must be greater than zero" };
-    }
-    offerConfig.bonusPoints = pts;
-  }
-  if (awardType === "MULTIPLIER_ON_RULE_POINTS") {
-    const mult = Number(multiplier);
-    if (!Number.isFinite(mult) || mult <= 0) {
-      return { ok: false, error: "Multiplier must be greater than zero" };
-    }
-    offerConfig.multiplierOnRulePoints = mult;
-  }
-  if (awardType === "FLAT_CASHBACK" || awardType === "PERCENT_CASHBACK") {
-    const cb = Number(cashbackValue);
-    if (!Number.isFinite(cb) || cb <= 0) {
-      return { ok: false, error: "Cashback value must be greater than zero" };
-    }
-    offerConfig.cashbackValue = cb;
-  }
-  if (expiryDays.trim()) {
-    const days = Number(expiryDays);
-    if (!Number.isFinite(days) || days <= 0) {
-      return { ok: false, error: "Expiry days must be a positive number" };
-    }
-    offerConfig.expiryDays = days;
-  }
-
-  const segment: NonNullable<CampaignUpsertRequest["targetSegment"]> = {};
-  const validTierUids = selectedTiers.filter((id) => ctx.tierOptions.some((o) => o.tierUid === id));
-  if (validTierUids.length > 0) segment.tierUids = validTierUids;
-  if (selectedChannels.length > 0) segment.channels = selectedChannels;
-  if (minAmount.trim()) {
-    const min = Number(minAmount);
-    if (!Number.isFinite(min) || min < 0) {
-      return { ok: false, error: "Minimum amount must be zero or greater" };
-    }
-    segment.minAmount = min;
-  }
-  if (countries.length > 0) segment.countries = countries;
-
   const payload: CampaignUpsertRequest = {
-    programmeUid,
+    programmeUid: ctx.programmeUid?.trim() || CAMPAIGN_DEFAULT_PROGRAMME_UID,
     name: name.trim(),
     description: description.trim() || undefined,
-    campaignType: campaignType.trim(),
-    occasionTags: occasionTags.length > 0 ? occasionTags : undefined,
-    triggerEventType,
-    offerConfig,
+    campaignType: CAMPAIGN_DEFAULT_TYPE,
+    triggerEventType: formatTriggerEventTypes(eventTypes),
+    offerConfig: resolveOfferConfig(ctx),
     validFrom: fromIso,
     validUntil: untilIso,
     budgetTotal: budget,
     alertThresholdPct: alertThresholdPct.trim() ? Number(alertThresholdPct) : 80,
-    priority: priority.trim() ? Number(priority) : 0,
+    priority: 0,
   };
 
-  if (Object.keys(segment).length > 0) payload.targetSegment = segment;
-  if (maxParticipations.trim()) payload.maxParticipations = Number(maxParticipations);
-  if (maxPerCustomer.trim()) payload.maxPerCustomer = Number(maxPerCustomer);
-  if (globalRewardCap.trim()) payload.globalRewardCap = Number(globalRewardCap);
-
-  const hasMutualExclGroup = mutualExclGroup.trim().length > 0;
-  if (hasMutualExclGroup) {
-    payload.mutualExclGroup = mutualExclGroup.trim();
-    payload.stackMode = stackMode;
+  const seg = ctx.preserveTargetSegment;
+  if (seg && Object.keys(seg).length > 0) {
+    payload.targetSegment = seg;
   }
 
   return { ok: true, payload };
+}
+
+export const CAMPAIGN_CREATE_STEP_SLUGS = ["basic-info", "budget", "review"] as const;
+
+export type CampaignCreateStepSlug = (typeof CAMPAIGN_CREATE_STEP_SLUGS)[number];
+
+export const CAMPAIGN_CREATE_STEPS: Array<{ slug: CampaignCreateStepSlug; label: string }> = [
+  { slug: "basic-info", label: "Basic Info" },
+  { slug: "budget", label: "Budget" },
+  { slug: "review", label: "Review" },
+];
+
+export function validateCampaignCreateStep(
+  stepIndex: number,
+  state: CampaignFormState
+): string | null {
+  switch (stepIndex) {
+    case 0:
+      if (!state.name.trim()) return "Campaign name is required";
+      if (!state.validFromLocal || !state.validUntilLocal) {
+        return "Valid from and valid until are required";
+      }
+      {
+        const fromIso = datetimeLocalToIso(state.validFromLocal);
+        const untilIso = datetimeLocalToIso(state.validUntilLocal);
+        if (new Date(untilIso).getTime() <= new Date(fromIso).getTime()) {
+          return "Valid until must be later than valid from";
+        }
+      }
+      if (parseTriggerEventTypes(state.triggerEventType).length === 0) {
+        return "At least one event type is required";
+      }
+      return null;
+    case 1: {
+      const budget = Number(state.budgetTotal);
+      if (!Number.isFinite(budget) || budget <= 0) {
+        return "Total budget must be greater than zero";
+      }
+      return null;
+    }
+    case 2:
+      return null;
+    default:
+      return null;
+  }
 }

@@ -31,8 +31,11 @@ export default function EditRuleBootstrapPage() {
           return;
         }
 
+        const ruleType = r.ruleType ?? "PROGRAMME";
         const draft = {
+          ruleType,
           programmeUid: r.programmeUid ?? programmeUid,
+          campaignUid: r.campaignUid,
           ruleUid: r.ruleUid,
           name: r.name,
           description: r.description ?? "",
@@ -54,9 +57,14 @@ export default function EditRuleBootstrapPage() {
         };
 
         // Single unified draft — every wizard step reads/writes the same key.
-        replaceRuleDraft(tenantId, draft);
+        const scope = ruleType === "CAMPAIGN" ? "campaign" : "programme";
+        replaceRuleDraft(tenantId, draft, scope);
 
-        router.replace("/dashboard/loyalty-rules/create/basic-info");
+        router.replace(
+          ruleType === "CAMPAIGN"
+            ? "/dashboard/campaign-rules/create/basic-info"
+            : "/dashboard/loyalty-rules/create/basic-info"
+        );
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Failed to load rule for editing");
       }

@@ -1,4 +1,4 @@
-export type CampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "EXHAUSTED" | "ENDED";
+export type CampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "EXHAUSTED" | "EXPIRED" | "ENDED";
 
 export type StackMode = "ADDITIVE" | "BEST_OFFER" | "FIRST_MATCH";
 

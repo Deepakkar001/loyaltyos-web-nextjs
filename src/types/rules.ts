@@ -8,8 +8,12 @@ export type RuleActionUpsertItem = {
   config?: unknown;
 };
 
+export type RuleType = "PROGRAMME" | "CAMPAIGN";
+
 export type RuleUpsertRequest = {
   programmeUid?: string;
+  ruleType?: RuleType;
+  campaignUid?: string;
   ruleUid?: string;
   name: string;
   description?: string;
@@ -27,6 +31,8 @@ export type EarnRuleResponse = {
   id: number;
   tenantId: string;
   programmeUid: string;
+  ruleType?: RuleType;
+  campaignUid?: string;
   ruleUid: string;
   name: string;
   status: RuleStatus;
@@ -35,6 +41,8 @@ export type EarnRuleResponse = {
 };
 
 export type EarnRuleDetailResponse = EarnRuleResponse & {
+  ruleType?: RuleType;
+  campaignUid?: string;
   description?: string;
   priority: number;
   effectiveAt?: string | null;

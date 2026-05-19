@@ -76,6 +76,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/dashboard/campaigns/create", label: "Create Campaign", icon: GitBranchPlus },
+      { href: "/dashboard/campaign-rules/create/campaign", label: "Create Campaign Rule", icon: GitBranchPlus },
       { href: "/dashboard/campaigns/reports", label: "Campaign Reports", icon: Download },
     ],
   },
