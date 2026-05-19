@@ -26,7 +26,6 @@ import {
   BookOpenText,
   Megaphone,
   LogOut,
-  LifeBuoy,
   X,
 } from "lucide-react";
 
@@ -61,7 +60,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/setup/event-schema", label: "Event Schema", icon: DatabaseZap },
       { href: "/dashboard/setup/webhooks", label: "Webhook Config", icon: Webhook },
       { href: "/dashboard/setup/rewards-catalog", label: "Rewards Catalog", icon: Star },
-      { href: "/dashboard/setup/tier-management", label: "Tier Management", icon: Layers },
     ],
   },
   {
@@ -309,11 +307,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
   if (isLoginLikePath) return <>{children}</>;
 
   if (!hydrated) {
-    return (
-      <div className="min-h-screen bg-[var(--surface-page)] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return null;
   }
 
   if (!accessToken) {
@@ -322,11 +316,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
       router.replace("/login");
       return null;
     }
-    return (
-      <div className="min-h-screen bg-[var(--surface-page)] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -417,14 +407,6 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
               <p className="text-[10px] text-muted-foreground truncate">Dashboard Home</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 w-9 p-0 border-0 bg-transparent text-muted-foreground hover:text-foreground"
-                aria-label="Support"
-              >
-                <LifeBuoy className="h-4 w-4" />
-              </Button>
               <ThemeToggle />
             </div>
           </div>

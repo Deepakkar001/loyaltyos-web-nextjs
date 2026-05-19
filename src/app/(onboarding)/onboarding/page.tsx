@@ -162,11 +162,7 @@ export default function OnboardingPage() {
 
   // While we are determining the latest status, avoid flashing an outdated step.
   if (hydrated && accessToken && !statusChecked) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return null;
   }
 
   return (

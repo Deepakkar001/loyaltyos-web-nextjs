@@ -35,6 +35,7 @@ import type {
   TierVelocityBucketRow,
 } from "@/types/analytics";
 import { getApiBaseUrl } from "@/lib/api/get-api-base-url";
+import { readMetadataCache, writeMetadataCache } from "@/lib/api/metadata-cache";
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
@@ -174,10 +175,13 @@ export const onboardingApi = {
   },
   /** Metadata — dropdown values for onboarding UI */
   getMetadata: async (): Promise<OnboardingMetadataResponse> => {
+    const cached = readMetadataCache();
+    if (cached) return cached;
     try {
       const res: AxiosResponse<OnboardingMetadataResponse> = await apiClient.get(
         "/api/v1/onboarding/metadata"
       );
+      writeMetadataCache(res.data);
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);

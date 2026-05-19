@@ -5,7 +5,6 @@ import { Toaster } from "react-hot-toast";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ThemeProvider } from "next-themes";
-
 const ReactQueryDevtools = dynamic(
   () => import("@tanstack/react-query-devtools").then((mod) => mod.ReactQueryDevtools),
   { ssr: false }

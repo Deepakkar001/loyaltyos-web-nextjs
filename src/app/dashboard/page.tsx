@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, CheckCircle2, ChevronRight, Clock, GripVertical, RotateCcw, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Clock, GripVertical, RotateCcw } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -751,19 +751,6 @@ function ChartTooltip({
       </motion.section>
       )}
 
-       {/* Small refresh status */}
-      <section aria-label="Refresh information" className="pb-10" style={{ order: 99 }}>
-         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-muted-foreground">
-           <span className="inline-flex items-center gap-2">
-             <Sparkles className="h-4 w-4 text-brand-500" />
-             Auto-refresh: ON (KPI every 30s)
-           </span>
-           <span className="inline-flex items-center gap-2">
-             <Clock className="h-4 w-4" />
-             Last updated: just now
-           </span>
-         </div>
-       </section>
      </div>
    );
  }

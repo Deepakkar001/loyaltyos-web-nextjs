@@ -184,11 +184,7 @@ export default function MyConfigurationsPage() {
         </div>
       </div>
 
-      {loading ? (
-        <Card className="p-8 border-border/70 bg-[var(--surface-card)]">
-          <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-        </Card>
-      ) : filtered.length === 0 ? (
+      {loading ? null : filtered.length === 0 ? (
         <Card className="p-8 border-border/70 bg-[var(--surface-card)]">
           <p className="text-sm font-semibold">No configurations found</p>
           <p className="text-sm text-muted-foreground mt-1">

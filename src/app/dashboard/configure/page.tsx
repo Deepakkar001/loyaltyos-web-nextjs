@@ -1,7 +1,15 @@
 "use client";
 
-import { Step4Programme } from "@/components/onboarding/steps/Step4Programme";
+import dynamic from "next/dynamic";
 import { Card } from "@/components/ui/card";
+
+const Step4Programme = dynamic(
+  () =>
+    import("@/components/onboarding/steps/Step4Programme").then((m) => ({
+      default: m.Step4Programme,
+    })),
+  { ssr: false }
+);
 
 export default function ConfigurePage() {
   return (
@@ -12,4 +20,3 @@ export default function ConfigurePage() {
     </div>
   );
 }
-

@@ -14,7 +14,6 @@ import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { STATUS_TO_STEP } from "@/types/onboarding";
-
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
   password: z.string().min(1, "Password is required"),
@@ -91,7 +90,7 @@ export default function LoginPage() {
   );
 
   return (
-    <div className="min-h-screen bg-brand-950 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-brand-950 flex items-center justify-center p-6 relative">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
           <div className="flex items-center justify-center gap-2.5 mb-6">
@@ -186,7 +185,7 @@ export default function LoginPage() {
 
         <p className="text-white/30 text-sm mt-6 text-center">
           New here?{" "}
-          <Link href="/register" className="text-brand-300 hover:text-white transition-colors">
+          <Link href="/onboarding" className="text-brand-300 hover:text-white transition-colors">
             Create an account
           </Link>
         </p>
