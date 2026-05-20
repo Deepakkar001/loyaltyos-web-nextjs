@@ -39,6 +39,7 @@ import { ActionNode } from "./components/nodes/ActionNode";
 import { EventNode } from "./components/nodes/EventNode";
 import { LogicNode } from "./components/nodes/LogicNode";
 import { GraphValidator, NodeValidator } from "./validator";
+import { useConditionFieldCatalog } from "@/components/loyalty-rules/condition-field-catalog-context";
 import { ConditionFlowErrorsProvider, type NodeErrorLevel } from "./errorsContext";
 import { ConditionFlowActionsProvider } from "./actionsContext";
 
@@ -100,6 +101,9 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
   onChange,
   onValidChange,
 }, ref) {
+  const catalog = useConditionFieldCatalog();
+  const fieldMetadata = catalog.metadata;
+
   const derived = useMemo(
     () => diagramFromConditionTree({ tree: value, eventType }),
     [value, eventType]
@@ -137,7 +141,7 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
       const es = edges as unknown as ConditionFlowEdge[];
       const hasConditionNodes = ns.some((n) => n.type === "conditionNode");
       const gv = new GraphValidator();
-      const nv = new NodeValidator();
+      const nv = new NodeValidator(fieldMetadata);
       const graphErrors = gv.validateGraph(ns, es);
       const nodeErrors = ns.flatMap((n) =>
         n.type === "conditionNode"
@@ -156,13 +160,13 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
         };
       }
       const builder = new RuleTreeBuilder();
-      const built = builder.buildTree(ns, es);
+      const built = builder.buildTree(ns, es, { fieldMetadata });
       const blocking = built.errors.filter((e) => e.severity === "error");
       const hasErrors = blocking.length > 0;
       const firstErrorMessage = blocking[0]?.message;
       return { tree: built.tree, hasConditionNodes, hasErrors, firstErrorMessage };
     },
-  }), [nodes, edges]);
+  }), [nodes, edges, fieldMetadata]);
 
   // ── External value sync ────────────────────────────────────────────────────
   // When the parent updates `value` from an external source (e.g., loading a
@@ -233,7 +237,7 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
   useEffect(() => {
     const t = setTimeout(() => {
       const gv = new GraphValidator();
-      const nv = new NodeValidator();
+      const nv = new NodeValidator(fieldMetadata);
       const graphErrors = gv.validateGraph(
         nodes as unknown as ConditionFlowNode[],
         edges as unknown as ConditionFlowEdge[]
@@ -250,7 +254,8 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
         const builder = new RuleTreeBuilder();
         const built = builder.buildTree(
           nodes as unknown as ConditionFlowNode[],
-          edges as unknown as ConditionFlowEdge[]
+          edges as unknown as ConditionFlowEdge[],
+          { fieldMetadata }
         );
         setErrors(built.errors);
         const builtBlocking = built.errors.filter((e) => e.severity === "error");
@@ -293,7 +298,7 @@ export const RuleFlowBuilder = forwardRef<RuleFlowBuilderHandle, {
     }, 150);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges, lastAppliedTree]);
+  }, [nodes, edges, lastAppliedTree, fieldMetadata]);
 
   const onConnect = useCallback(
     (c: Connection) => {

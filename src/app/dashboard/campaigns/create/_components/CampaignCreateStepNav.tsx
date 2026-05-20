@@ -14,7 +14,7 @@ const BASE = "/dashboard/campaigns/create";
 
 export function CampaignCreateStepNav({ stepIndex }: { stepIndex: number }) {
   const router = useRouter();
-  const { form } = useCampaignForm();
+  const { form, eventSchemaDraft } = useCampaignForm();
 
   const isFirst = stepIndex === 0;
   const isReview = stepIndex === CAMPAIGN_CREATE_STEPS.length - 1;
@@ -30,7 +30,7 @@ export function CampaignCreateStepNav({ stepIndex }: { stepIndex: number }) {
   };
 
   const onNext = () => {
-    const err = validateCampaignCreateStep(stepIndex, form);
+    const err = validateCampaignCreateStep(stepIndex, form, eventSchemaDraft);
     if (err) {
       toast.error(err);
       return;

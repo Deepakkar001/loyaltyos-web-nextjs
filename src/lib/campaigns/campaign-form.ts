@@ -4,6 +4,8 @@ import type {
   CampaignTargetSegment,
   CampaignUpsertRequest,
 } from "@/types/campaigns";
+import type { EventSchemaDraft } from "@/lib/programme/event-schema-merge";
+import { validateCampaignCreateEventSchemaStep } from "@/lib/campaigns/campaign-create-event-schema";
 import {
   CAMPAIGN_DEFAULT_OFFER,
   CAMPAIGN_DEFAULT_PROGRAMME_UID,
@@ -24,7 +26,7 @@ export const CAMPAIGN_APPROVAL_BUDGET_THRESHOLD = 100_000;
 export const CAMPAIGN_FIELD_PLACEHOLDERS = {
   name: "e.g. Winter Sale 2026",
   description: "Internal notes or customer-facing copy",
-  eventType: "e.g. PURCHASE — type and press Enter to add each event",
+  eventType: "Select from configured event schema",
   validFrom: "Campaign start date & time",
   validUntil: "Campaign end date & time",
   validFromHint: "e.g. 2026-12-01 09:00 (must be before valid until)",
@@ -34,6 +36,7 @@ export const CAMPAIGN_FIELD_PLACEHOLDERS = {
 } as const;
 
 export type CampaignFormState = {
+  programmeUid: string;
   name: string;
   description: string;
   validFromLocal: string;
@@ -58,6 +61,7 @@ export function isoToDatetimeLocal(iso: string | undefined): string {
 
 export function campaignToFormState(c: CampaignResponse): CampaignFormState {
   return {
+    programmeUid: c.programmeUid?.trim() || CAMPAIGN_DEFAULT_PROGRAMME_UID,
     name: c.name ?? "",
     description: c.description ?? "",
     validFromLocal: isoToDatetimeLocal(c.validFrom),
@@ -70,6 +74,7 @@ export function campaignToFormState(c: CampaignResponse): CampaignFormState {
 
 export function defaultCreateFormState(): CampaignFormState {
   return {
+    programmeUid: "",
     name: "",
     description: "",
     validFromLocal: "",
@@ -81,8 +86,6 @@ export function defaultCreateFormState(): CampaignFormState {
 }
 
 export type BuildPayloadContext = {
-  /** Edit only — programme cannot change in UI but must be sent on update. */
-  programmeUid?: string;
   /** Edit only — keep existing offer when UI does not collect offer fields. */
   preserveOfferConfig?: CampaignOfferConfig;
   preserveTargetSegment?: CampaignTargetSegment;
@@ -135,19 +138,23 @@ export function buildCampaignUpsertPayload(
     };
   }
   const eventTypes = parseTriggerEventTypes(triggerEventType);
-  if (eventTypes.length === 0) return { ok: false, error: "At least one event type is required" };
 
   const budget = Number(budgetTotal);
   if (!Number.isFinite(budget) || budget <= 0) {
     return { ok: false, error: "Total budget must be greater than zero" };
   }
 
+  const programmeUid = state.programmeUid?.trim();
+  if (!programmeUid) {
+    return { ok: false, error: "Programme is required" };
+  }
+
   const payload: CampaignUpsertRequest = {
-    programmeUid: ctx.programmeUid?.trim() || CAMPAIGN_DEFAULT_PROGRAMME_UID,
+    programmeUid,
     name: name.trim(),
     description: description.trim() || undefined,
     campaignType: CAMPAIGN_DEFAULT_TYPE,
-    triggerEventType: formatTriggerEventTypes(eventTypes),
+    triggerEventType: eventTypes.length > 0 ? formatTriggerEventTypes(eventTypes) : "",
     offerConfig: resolveOfferConfig(ctx),
     validFrom: fromIso,
     validUntil: untilIso,
@@ -164,22 +171,25 @@ export function buildCampaignUpsertPayload(
   return { ok: true, payload };
 }
 
-export const CAMPAIGN_CREATE_STEP_SLUGS = ["basic-info", "budget", "review"] as const;
+export const CAMPAIGN_CREATE_STEP_SLUGS = ["basic-info", "events", "budget", "review"] as const;
 
 export type CampaignCreateStepSlug = (typeof CAMPAIGN_CREATE_STEP_SLUGS)[number];
 
 export const CAMPAIGN_CREATE_STEPS: Array<{ slug: CampaignCreateStepSlug; label: string }> = [
   { slug: "basic-info", label: "Basic Info" },
+  { slug: "events", label: "Events" },
   { slug: "budget", label: "Budget" },
   { slug: "review", label: "Review" },
 ];
 
 export function validateCampaignCreateStep(
   stepIndex: number,
-  state: CampaignFormState
+  state: CampaignFormState,
+  eventSchemaDraft?: EventSchemaDraft
 ): string | null {
   switch (stepIndex) {
     case 0:
+      if (!state.programmeUid?.trim()) return "Programme is required";
       if (!state.name.trim()) return "Campaign name is required";
       if (!state.validFromLocal || !state.validUntilLocal) {
         return "Valid from and valid until are required";
@@ -191,18 +201,20 @@ export function validateCampaignCreateStep(
           return "Valid until must be later than valid from";
         }
       }
-      if (parseTriggerEventTypes(state.triggerEventType).length === 0) {
-        return "At least one event type is required";
+      return null;
+    case 1:
+      if (eventSchemaDraft) {
+        return validateCampaignCreateEventSchemaStep(eventSchemaDraft);
       }
       return null;
-    case 1: {
+    case 2: {
       const budget = Number(state.budgetTotal);
       if (!Number.isFinite(budget) || budget <= 0) {
         return "Total budget must be greater than zero";
       }
       return null;
     }
-    case 2:
+    case 3:
       return null;
     default:
       return null;

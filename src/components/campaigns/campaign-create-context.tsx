@@ -7,7 +7,9 @@ import {
   useEffect,
   useRef,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 
 import {
@@ -15,6 +17,7 @@ import {
   defaultCreateFormState,
   type CampaignFormState,
 } from "@/lib/campaigns/campaign-form";
+import { defaultEventSchemaDraft, type EventSchemaDraft } from "@/lib/programme/event-schema-merge";
 import {
   clearCampaignCreateDraft,
   isBrowserPageReload,
@@ -31,11 +34,15 @@ export type CampaignFormMode = "create" | "edit";
 type CampaignFormContextValue = {
   mode: CampaignFormMode;
   campaignUid?: string;
-  editProgrammeUid?: string;
   preserveOfferConfig?: CampaignOfferConfig;
   preserveTargetSegment?: CampaignTargetSegment;
   form: CampaignFormState;
   patch: (partial: Partial<CampaignFormState>) => void;
+  eventSchemaDraft: EventSchemaDraft;
+  setEventSchemaDraft: Dispatch<SetStateAction<EventSchemaDraft>>;
+  /** Programme uid the event schema draft was bootstrapped or edited for (survives step navigation). */
+  eventSchemaBootstrappedProgramme: string | null;
+  setEventSchemaBootstrappedProgramme: Dispatch<SetStateAction<string | null>>;
   clearDraft: () => void;
 };
 
@@ -66,6 +73,10 @@ export function CampaignFormProvider({
     if (initialCampaign) return campaignToFormState(initialCampaign);
     return defaultCreateFormState();
   });
+  const [eventSchemaDraft, setEventSchemaDraft] = useState<EventSchemaDraft>(defaultEventSchemaDraft);
+  const [eventSchemaBootstrappedProgramme, setEventSchemaBootstrappedProgramme] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (!isCreate || reloadHandledRef.current) return;
@@ -73,6 +84,8 @@ export function CampaignFormProvider({
     reloadHandledRef.current = true;
     if (tenantId) clearCampaignCreateDraft(tenantId);
     setForm(defaultCreateFormState());
+    setEventSchemaDraft(defaultEventSchemaDraft());
+    setEventSchemaBootstrappedProgramme(null);
   }, [isCreate, tenantId]);
 
   const patch = useCallback((partial: Partial<CampaignFormState>) => {
@@ -81,6 +94,8 @@ export function CampaignFormProvider({
 
   const clearDraft = useCallback(() => {
     if (tenantId) clearCampaignCreateDraft(tenantId);
+    setEventSchemaDraft(defaultEventSchemaDraft());
+    setEventSchemaBootstrappedProgramme(null);
   }, [tenantId]);
 
   useEffect(() => {
@@ -92,11 +107,14 @@ export function CampaignFormProvider({
   const value: CampaignFormContextValue = {
     mode,
     campaignUid,
-    editProgrammeUid: initialCampaign?.programmeUid,
     preserveOfferConfig: initialCampaign?.offerConfig,
     preserveTargetSegment: initialCampaign?.targetSegment,
     form,
     patch,
+    eventSchemaDraft,
+    setEventSchemaDraft,
+    eventSchemaBootstrappedProgramme,
+    setEventSchemaBootstrappedProgramme,
     clearDraft,
   };
 

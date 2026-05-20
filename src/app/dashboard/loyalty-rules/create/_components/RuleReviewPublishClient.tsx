@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { FieldHelp } from "@/components/ui/field-help";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { resolveSingleTriggerForCampaignRule } from "@/lib/campaigns/trigger-event-types";
+import { syncCampaignEventSchemaForRuleTrigger } from "@/lib/campaigns/campaign-event-schema-sync";
 import { clearRuleDraft, loadRuleDraft } from "@/lib/store/rule-draft-storage";
 import { loyaltyRulesAdminApi } from "@/lib/api/client";
 import type { RuleUpsertRequest } from "@/types/rules";
@@ -37,7 +38,8 @@ export function RuleReviewPublishClient() {
       toast.error("Missing tenant session. Please re-login.");
       return;
     }
-    if (!draft || !draft.name) {
+    const currentDraft = loadRuleDraft(tenantId, draftScope);
+    if (!currentDraft || !currentDraft.name) {
       toast.error("Rule draft not found. Start from the first step.");
       router.push(basicInfoPath);
       return;
@@ -46,7 +48,7 @@ export function RuleReviewPublishClient() {
       toast.error("Please confirm you understand the rule is not live yet.");
       return;
     }
-    if (kind === "campaign" && !draft.campaignUid) {
+    if (kind === "campaign" && !currentDraft.campaignUid) {
       toast.error("Campaign is required. Start from campaign selection.");
       router.push(stepHref(basePath, "campaign"));
       return;
@@ -54,12 +56,12 @@ export function RuleReviewPublishClient() {
 
     setPublishing(true);
     try {
-      let triggerEventType = draft.triggerEventType?.trim() || "PURCHASE";
+      let triggerEventType = currentDraft.triggerEventType?.trim() || "PURCHASE";
       if (kind === "campaign") {
         try {
           triggerEventType = resolveSingleTriggerForCampaignRule(
-            draft.campaignTriggerEventTypes ?? draft.triggerEventType,
-            draft.triggerEventType
+            currentDraft.campaignTriggerEventTypes ?? currentDraft.triggerEventType,
+            currentDraft.triggerEventType
           );
         } catch (e: unknown) {
           toast.error(e instanceof Error ? e.message : "Invalid event type");
@@ -69,32 +71,55 @@ export function RuleReviewPublishClient() {
       }
 
       const payload: RuleUpsertRequest = {
-        programmeUid: draft.programmeUid ?? "default",
-        ruleType: draft.ruleType ?? (kind === "campaign" ? "CAMPAIGN" : "PROGRAMME"),
-        campaignUid: draft.campaignUid,
-        ruleUid: draft.ruleUid,
-        name: draft.name,
-        description: draft.description,
-        priority: draft.priority ?? 0,
+        programmeUid: currentDraft.programmeUid ?? "default",
+        ruleType: currentDraft.ruleType ?? (kind === "campaign" ? "CAMPAIGN" : "PROGRAMME"),
+        campaignUid: currentDraft.campaignUid,
+        ruleUid: currentDraft.ruleUid,
+        name: currentDraft.name,
+        description: currentDraft.description,
+        priority: currentDraft.priority ?? 0,
         triggerEventType,
-        executionMode: draft.executionMode ?? "ALL_MATCHING",
+        executionMode: currentDraft.executionMode ?? "ALL_MATCHING",
         status: "DRAFT",
-        conditionTree: draft.conditionTree ?? {},
-        actions: (draft.actions ?? []).map((a) => ({
+        conditionTree: currentDraft.conditionTree ?? {},
+        actions: (currentDraft.actions ?? []).map((a) => ({
           actionUid: a.actionUid,
           actionType: a.actionType,
           formula: a.formula,
           config: a.config,
         })),
-        effectiveAt: draft.effectiveAt,
-        endAt: draft.endAt,
+        effectiveAt: currentDraft.effectiveAt,
+        endAt: currentDraft.endAt,
       };
 
-      const res = draft.ruleUid
-        ? await loyaltyRulesAdminApi.updateRule(draft.ruleUid, draft.programmeUid ?? "default", payload)
+      const res = currentDraft.ruleUid
+        ? await loyaltyRulesAdminApi.updateRule(
+            currentDraft.ruleUid,
+            currentDraft.programmeUid ?? "default",
+            payload
+          )
         : await loyaltyRulesAdminApi.createRule(payload);
+
+      if (kind === "campaign" && currentDraft.campaignUid) {
+        try {
+          await syncCampaignEventSchemaForRuleTrigger(
+            currentDraft.campaignUid,
+            currentDraft.programmeUid ?? "default",
+            triggerEventType
+          );
+        } catch (syncErr: unknown) {
+          toast.error(
+            syncErr instanceof Error
+              ? `Rule saved but campaign event schema sync failed: ${syncErr.message}`
+              : "Rule saved but campaign event schema sync failed"
+          );
+        }
+      }
+
       clearRuleDraft(tenantId, draftScope);
-      toast.success(draft.ruleUid ? `Rule updated: ${res.ruleUid}` : `Rule created: ${res.ruleUid}`);
+      toast.success(
+        currentDraft.ruleUid ? `Rule updated: ${res.ruleUid}` : `Rule created: ${res.ruleUid}`
+      );
       router.push(listHref);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to publish rule");

@@ -18,6 +18,7 @@ import { getAccessToken, setAccessToken as setSessionAccessToken, clearSession }
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { EarnRuleDetailResponse, EarnRuleResponse, RuleChangeLogResponse, RuleStatus, RuleUpsertRequest } from "@/types/rules";
 import {
+  CampaignEventSchemaUpsertRequest,
   CampaignParticipationResponse,
   CampaignResponse,
   CampaignStatsResponse,
@@ -472,7 +473,7 @@ export const goLiveApi = {
 
 export const loyaltyRulesAdminApi = {
   listRules: async (
-    programmeUid = "default",
+    programmeUid: string = "default",
     ruleType?: "PROGRAMME" | "CAMPAIGN"
   ): Promise<EarnRuleResponse[]> => {
     try {
@@ -564,6 +565,30 @@ export const campaignsAdminApi = {
     try {
       const res = await apiClient.get<CampaignResponse>(
         `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getCampaignEventSchema: async (campaignUid: string): Promise<Record<string, unknown>> => {
+    try {
+      const res = await apiClient.get<Record<string, unknown>>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/event-schema`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  upsertCampaignEventSchema: async (
+    campaignUid: string,
+    payload: CampaignEventSchemaUpsertRequest
+  ): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.put<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/event-schema`,
+        payload
       );
       return res.data;
     } catch (err) {

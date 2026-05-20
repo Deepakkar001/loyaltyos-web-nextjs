@@ -37,6 +37,7 @@ export default function EditRuleBootstrapPage() {
           programmeUid: r.programmeUid ?? programmeUid,
           campaignUid: r.campaignUid,
           ruleUid: r.ruleUid,
+          draftIntent: "edit" as const,
           name: r.name,
           description: r.description ?? "",
           priority: r.priority ?? 0,

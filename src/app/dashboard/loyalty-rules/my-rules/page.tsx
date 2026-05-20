@@ -9,9 +9,25 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RuleStatusBadge } from "@/components/loyalty-rules/RuleStatusBadge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { loyaltyRulesAdminApi } from "@/lib/api/client";
+import { NativeSelect } from "@/components/ui/native-select";
+import { programmeApiV2 } from "@/lib/api/client";
+import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
+import { loadTenantRulesForList } from "@/lib/rules/load-tenant-rules";
 import type { EarnRuleResponse, RuleStatus, RuleType } from "@/types/rules";
+
+const RULE_TYPE_OPTIONS: Array<{ value: RuleType | "ALL"; label: string }> = [
+  { value: "ALL", label: "All types" },
+  { value: "PROGRAMME", label: "Programme" },
+  { value: "CAMPAIGN", label: "Campaign" },
+];
+
+const STATUS_OPTIONS: Array<{ value: RuleStatus | "ALL"; label: string }> = [
+  { value: "ALL", label: "All statuses" },
+  { value: "DRAFT", label: "Draft" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "PAUSED", label: "Paused" },
+  { value: "ARCHIVED", label: "Archived" },
+];
 
 export default function MyRulesPage() {
   const searchParams = useSearchParams();
@@ -22,19 +38,32 @@ export default function MyRulesPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<RuleStatus | "ALL">("ALL");
   const [ruleTypeFilter, setRuleTypeFilter] = useState<RuleType | "ALL">(initialRuleType);
-  const programmeUid = "default";
+  const [programmeFilter, setProgrammeFilter] = useState<string>("ALL");
+  const [programmes, setProgrammes] = useState<Array<{ programmeUid: string; name: string }>>([]);
 
   useEffect(() => {
     setRuleTypeFilter(initialRuleType);
   }, [initialRuleType]);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const list = await programmeApiV2.listProgrammes();
+        setProgrammes(mergeProgrammeDropdownRows(list));
+      } catch {
+        /* programme filter optional */
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const res = await loyaltyRulesAdminApi.listRules(
-          programmeUid,
+        const res = await loadTenantRulesForList(
+          programmeFilter,
+          programmes.map((p) => p.programmeUid),
           ruleTypeFilter === "ALL" ? undefined : ruleTypeFilter
         );
         if (!alive) return;
@@ -48,7 +77,26 @@ export default function MyRulesPage() {
     return () => {
       alive = false;
     };
-  }, [ruleTypeFilter]);
+  }, [ruleTypeFilter, programmeFilter, programmes]);
+
+  const programmeSelectOptions = useMemo(
+    () => [
+      { value: "ALL", label: "All programmes" },
+      ...programmes.map((p) => ({
+        value: p.programmeUid,
+        label: p.name,
+      })),
+    ],
+    [programmes]
+  );
+
+  const programmeLabelByUid = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of programmes) {
+      map.set(p.programmeUid, p.name);
+    }
+    return map;
+  }, [programmes]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -73,12 +121,12 @@ export default function MyRulesPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/dashboard/loyalty-rules/create/basic-info">
+          <Link href="/dashboard/loyalty-rules/create/basic-info?new=1">
             <Button variant="outline" className="rounded-full">
               + Programme Rule
             </Button>
           </Link>
-          <Link href="/dashboard/campaign-rules/create/campaign">
+          <Link href="/dashboard/campaign-rules/create/campaign?new=1">
             <Button className="rounded-full">+ Campaign Rule</Button>
           </Link>
         </div>
@@ -92,28 +140,27 @@ export default function MyRulesPage() {
             placeholder="Search by name, UID, or event type…"
           />
         </div>
-        <Select value={ruleTypeFilter} onValueChange={(v) => setRuleTypeFilter(v as RuleType | "ALL")}>
-          <SelectTrigger className="w-full sm:w-[200px] h-10 rounded-xl bg-[var(--surface-sunken)] border-0">
-            <SelectValue placeholder="Rule type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All types</SelectItem>
-            <SelectItem value="PROGRAMME">Programme</SelectItem>
-            <SelectItem value="CAMPAIGN">Campaign</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={status} onValueChange={(v) => setStatus(v as RuleStatus | "ALL")}>
-          <SelectTrigger className="w-full sm:w-[220px] h-10 rounded-xl bg-[var(--surface-sunken)] border-0">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All statuses</SelectItem>
-            <SelectItem value="DRAFT">Draft</SelectItem>
-            <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="PAUSED">Paused</SelectItem>
-            <SelectItem value="ARCHIVED">Archived</SelectItem>
-          </SelectContent>
-        </Select>
+        <NativeSelect
+          ariaLabel="Filter by programme"
+          value={programmeFilter}
+          onChange={setProgrammeFilter}
+          options={programmeSelectOptions}
+          className="w-full sm:w-[200px]"
+        />
+        <NativeSelect
+          ariaLabel="Filter by rule type"
+          value={ruleTypeFilter}
+          onChange={(v) => setRuleTypeFilter(v as RuleType | "ALL")}
+          options={RULE_TYPE_OPTIONS}
+          className="w-full sm:w-[180px]"
+        />
+        <NativeSelect
+          ariaLabel="Filter by status"
+          value={status}
+          onChange={(v) => setStatus(v as RuleStatus | "ALL")}
+          options={STATUS_OPTIONS}
+          className="w-full sm:w-[180px]"
+        />
       </div>
 
       {loading ? (
@@ -139,12 +186,13 @@ export default function MyRulesPage() {
                     <p className="text-sm font-semibold truncate">{r.name}</p>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Event: {r.triggerEventType} · Execution: {r.executionMode} · UID: {r.ruleUid}
+                    Programme: {programmeLabelByUid.get(r.programmeUid) ?? r.programmeUid} · Event:{" "}
+                    {r.triggerEventType} · Execution: {r.executionMode} · UID: {r.ruleUid}
                     {r.campaignUid ? ` · Campaign: ${r.campaignUid}` : ""}
                   </p>
                 </div>
                 <Link
-                  href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(r.ruleUid)}/details?programmeUid=${encodeURIComponent(programmeUid)}`}
+                  href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(r.ruleUid)}/details?programmeUid=${encodeURIComponent(r.programmeUid)}`}
                 >
                   <Button variant="outline" className="rounded-full">
                     View Details

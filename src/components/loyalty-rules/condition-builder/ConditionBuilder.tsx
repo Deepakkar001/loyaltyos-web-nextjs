@@ -13,6 +13,13 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 import type { ComparisonOp, ConditionField, ConditionGroup, ConditionNode, ConditionTreeDraft, LeafCondition, LogicalOp, NotNode } from "./types";
+import { useConditionFieldCatalog } from "@/components/loyalty-rules/condition-field-catalog-context";
+import {
+  defaultFieldFromCatalog,
+  opsForCatalogField,
+  resolveCatalogFieldType,
+  type ConditionFieldValueType,
+} from "@/lib/rules/condition-field-catalog";
 
 function StyledSelect({
   value,
@@ -76,61 +83,13 @@ function newId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`;
 }
 
-const FIELD_OPTIONS: Array<{ value: ConditionField; label: string; type: "number" | "string" | "enum" | "datetime" }> = [
-  { value: "event.amount", label: "event.amount", type: "number" },
-  { value: "event.eventType", label: "event.eventType", type: "enum" },
-  { value: "event.channel", label: "event.channel", type: "enum" },
-  { value: "event.timestamp", label: "event.timestamp", type: "datetime" },
-  { value: "event.transactionId", label: "event.transactionId", type: "string" },
-  { value: "event.merchantId", label: "event.merchantId", type: "string" },
-  { value: "event.productCategory", label: "event.productCategory", type: "string" },
-  { value: "customer.tierUid", label: "customer.tierUid", type: "enum" },
-];
-
-function opsForType(t: "number" | "string" | "enum" | "datetime"): Array<{ value: ComparisonOp; label: string }> {
-  if (t === "number") {
-    return [
-      { value: "EQ", label: "=" },
-      { value: "NEQ", label: "≠" },
-      { value: "GT", label: ">" },
-      { value: "GTE", label: "≥" },
-      { value: "LT", label: "<" },
-      { value: "LTE", label: "≤" },
-      { value: "BETWEEN", label: "Between" },
-      { value: "IS_NULL", label: "Is empty" },
-      { value: "IS_NOT_NULL", label: "Is not empty" },
-    ];
-  }
-  if (t === "string") {
-    return [
-      { value: "EQ", label: "Equals" },
-      { value: "NEQ", label: "Not equals" },
-      { value: "CONTAINS", label: "Contains" },
-      { value: "STARTS_WITH", label: "Starts with" },
-      { value: "IN", label: "Any of" },
-      { value: "NOT_IN", label: "None of" },
-      { value: "IS_NULL", label: "Is empty" },
-      { value: "IS_NOT_NULL", label: "Is not empty" },
-    ];
-  }
-  // enum + datetime (datetime treated as string for now; backend accepts string literal)
-  return [
-    { value: "EQ", label: "Equals" },
-    { value: "NEQ", label: "Not equals" },
-    { value: "IN", label: "Any of" },
-    { value: "NOT_IN", label: "None of" },
-    { value: "IS_NULL", label: "Is empty" },
-    { value: "IS_NOT_NULL", label: "Is not empty" },
-  ];
-}
-
-function defaultLeaf(): LeafCondition {
+function defaultLeaf(defaultField: string): LeafCondition {
   return {
     id: newId(),
     kind: "leaf",
-    field: "event.amount",
-    op: "GTE",
-    value: 500,
+    field: defaultField,
+    op: defaultField.includes("amount") ? "GTE" : "EQ",
+    value: defaultField.includes("amount") ? 500 : "",
   };
 }
 
@@ -141,6 +100,9 @@ export function ConditionBuilder({
   value: ConditionTreeDraft;
   onChange: (next: ConditionTreeDraft) => void;
 }) {
+  const catalog = useConditionFieldCatalog();
+  const defaultField = defaultFieldFromCatalog(catalog);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -156,6 +118,9 @@ export function ConditionBuilder({
             <p className="text-sm font-semibold">When these conditions match</p>
             <p className="text-xs text-muted-foreground mt-1">
               Drag and drop to reorder conditions. Use AND/OR to control how they combine.
+              {catalog.loading
+                ? " Loading fields from your programme event schema…"
+                : ` Fields reflect the ${catalog.triggerEventType} payload for programme ${catalog.programmeUid}.`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -169,12 +134,13 @@ export function ConditionBuilder({
             <Button
               type="button"
               variant={value.kind === "group" ? "default" : "outline"}
+              disabled={catalog.fields.length === 0}
               onClick={() =>
                 onChange({
                   kind: "group",
                   id: newId(),
                   op: "AND",
-                  nodes: group?.nodes?.length ? group.nodes : [defaultLeaf()],
+                  nodes: group?.nodes?.length ? group.nodes : defaultField ? [defaultLeaf(defaultField)] : [],
                 })
               }
             >
@@ -202,6 +168,7 @@ export function ConditionBuilder({
               <ConditionGroupEditor
                 group={group}
                 sensors={sensors}
+                defaultField={defaultField}
                 onChange={(g) => onChange(g)}
               />
             ) : null}
@@ -211,9 +178,11 @@ export function ConditionBuilder({
                 type="button"
                 variant="outline"
                 className="rounded-full"
+                disabled={!defaultField}
                 onClick={() => {
+                  if (!defaultField) return;
                   const g = group!;
-                  onChange({ ...g, nodes: [...g.nodes, defaultLeaf()] });
+                  onChange({ ...g, nodes: [...g.nodes, defaultLeaf(defaultField)] });
                 }}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -225,7 +194,7 @@ export function ConditionBuilder({
                 className="rounded-full ml-2"
                 onClick={() => {
                   const g = group!;
-                  const newGroup: ConditionGroup = { id: newId(), kind: "group", op: "AND", nodes: [defaultLeaf()] };
+                  const newGroup: ConditionGroup = { id: newId(), kind: "group", op: "AND", nodes: [defaultLeaf(defaultField)] };
                   onChange({ ...g, nodes: [...g.nodes, newGroup] });
                 }}
               >
@@ -254,14 +223,17 @@ function SortableLeafRow({
   onDelete: () => void;
   onWrapNot: () => void;
 }) {
+  const catalog = useConditionFieldCatalog();
+  const fieldOptions = catalog.fields;
   const sortable = useSortable({ id: node.id });
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
   };
 
-  const fieldMeta = FIELD_OPTIONS.find((f) => f.value === node.field) ?? FIELD_OPTIONS[0]!;
-  const opOptions = opsForType(fieldMeta.type);
+  const selected = fieldOptions.find((f) => f.value === node.field) ?? fieldOptions[0];
+  const fieldMetaType = resolveCatalogFieldType(catalog, node.field || selected?.value);
+  const opOptions = opsForCatalogField(catalog, node.field || selected?.value);
   const op = opOptions.some((o) => o.value === node.op) ? node.op : opOptions[0]!.value;
 
   return (
@@ -293,11 +265,16 @@ function SortableLeafRow({
             ariaLabel="Condition field"
             value={node.field}
             onChange={(v) => {
-              const meta = FIELD_OPTIONS.find((f) => f.value === (v as ConditionField)) ?? FIELD_OPTIONS[0]!;
-              const nextOp = opsForType(meta.type)[0]!.value;
-              onChange({ ...node, field: v as ConditionField, op: nextOp, value: meta.type === "number" ? 0 : "" });
+              const nextType = resolveCatalogFieldType(catalog, v);
+              const nextOp = opsForCatalogField(catalog, v)[0]!.value;
+              onChange({
+                ...node,
+                field: v as ConditionField,
+                op: nextOp,
+                value: nextType === "number" ? 0 : "",
+              });
             }}
-            options={FIELD_OPTIONS.map((f) => ({ value: f.value, label: f.label }))}
+            options={fieldOptions.map((f) => ({ value: f.value, label: f.label }))}
           />
         </div>
 
@@ -318,7 +295,7 @@ function SortableLeafRow({
           />
         </div>
 
-        <ConditionValueEditor node={node} fieldType={fieldMeta.type} onChange={onChange} />
+        <ConditionValueEditor node={node} fieldType={fieldMetaType} onChange={onChange} />
 
         <Button type="button" variant="ghost" className="h-9 w-9 p-0" onClick={onDelete} aria-label="Delete condition">
           <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -340,7 +317,7 @@ function ConditionValueEditor({
   onChange,
 }: {
   node: LeafCondition;
-  fieldType: "number" | "string" | "enum" | "datetime";
+  fieldType: ConditionFieldValueType;
   onChange: (next: LeafCondition) => void;
 }) {
   if (node.op === "IS_NULL" || node.op === "IS_NOT_NULL") {
@@ -419,10 +396,12 @@ function ConditionValueEditor({
 function ConditionGroupEditor({
   group,
   sensors,
+  defaultField,
   onChange,
 }: {
   group: ConditionGroup;
   sensors: ReturnType<typeof useSensors>;
+  defaultField: string;
   onChange: (next: ConditionGroup) => void;
 }) {
   const ids = useMemo(() => group.nodes.map((n) => n.id), [group.nodes]);
@@ -446,6 +425,7 @@ function ConditionGroupEditor({
                 key={n.id}
                 node={n}
                 sensors={sensors}
+                defaultField={defaultField}
                 onChange={(next) => onChange({ ...group, nodes: group.nodes.map((x) => (x.id === n.id ? next : x)) })}
                 onDelete={() => onChange({ ...group, nodes: group.nodes.filter((x) => x.id !== n.id) })}
               />
@@ -460,11 +440,13 @@ function ConditionGroupEditor({
 function ConditionNodeEditor({
   node,
   sensors,
+  defaultField,
   onChange,
   onDelete,
 }: {
   node: ConditionNode;
   sensors: ReturnType<typeof useSensors>;
+  defaultField: string;
   onChange: (next: ConditionNode) => void;
   onDelete: () => void;
 }) {
@@ -494,6 +476,7 @@ function ConditionNodeEditor({
           <ConditionNodeEditor
             node={node.node}
             sensors={sensors}
+            defaultField={defaultField}
             onChange={(inner) => onChange({ ...node, node: inner })}
             onDelete={() => onChange(node.node)}
           />
@@ -515,14 +498,14 @@ function ConditionNodeEditor({
         </Button>
       </div>
       <div className="mt-3">
-        <ConditionGroupEditor group={node} sensors={sensors} onChange={(g) => onChange(g)} />
+        <ConditionGroupEditor group={node} sensors={sensors} defaultField={defaultField} onChange={(g) => onChange(g)} />
       </div>
       <div className="mt-3 flex gap-2">
         <Button
           type="button"
           variant="outline"
           className="rounded-full"
-          onClick={() => onChange({ ...node, nodes: [...node.nodes, defaultLeaf()] })}
+          onClick={() => onChange({ ...node, nodes: [...node.nodes, defaultLeaf(defaultField)] })}
         >
           <Plus className="h-4 w-4 mr-2" />
           Add condition

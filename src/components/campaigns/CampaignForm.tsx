@@ -31,7 +31,6 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
   const router = useRouter();
   const {
     form,
-    editProgrammeUid,
     preserveOfferConfig,
     preserveTargetSegment,
     campaignUid,
@@ -40,7 +39,6 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
 
   const submit = async () => {
     const built = buildCampaignUpsertPayload(form, {
-      programmeUid: editProgrammeUid,
       preserveOfferConfig,
       preserveTargetSegment,
     });

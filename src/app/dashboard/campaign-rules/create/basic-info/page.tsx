@@ -16,7 +16,11 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
-import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
+import {
+  isEditingExistingRuleDraft,
+  loadRuleDraft,
+  saveRuleDraftFields,
+} from "@/lib/store/rule-draft-storage";
 
 const schema = z.object({
   name: z.string().min(2).max(100),
@@ -43,6 +47,10 @@ export default function CreateCampaignRuleBasicInfoPage() {
     if (!draft?.campaignUid) {
       router.replace(stepHref(basePath, "campaign"));
       return;
+    }
+    // Drop stale ruleUid only for brand-new creates — edit intent is stored in the draft.
+    if (!isEditingExistingRuleDraft(draft) && draft.ruleUid) {
+      saveRuleDraftFields(tenantId, { ruleUid: undefined, draftIntent: "create" }, "campaign");
     }
     if (!draft.triggerEventType?.trim()) {
       router.replace(stepHref(basePath, "event"));
@@ -86,6 +94,7 @@ export default function CreateCampaignRuleBasicInfoPage() {
         priority: Number(data.priority),
         executionMode: data.executionMode,
         status: "DRAFT",
+        draftIntent: isEditingExistingRuleDraft(draft) ? "edit" : "create",
       },
       "campaign"
     );

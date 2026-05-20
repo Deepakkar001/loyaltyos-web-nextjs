@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-
 import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
-import { formatTriggerEventTypesLabel } from "@/lib/campaigns/trigger-event-types";
+import { summarizeCampaignCreateEventSchema } from "@/lib/campaigns/campaign-create-event-schema";
+import { useProgrammeDropdown } from "@/lib/programme/use-programme-dropdown";
+import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -22,8 +22,10 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function CreateCampaignReviewPage() {
-  const { form } = useCampaignForm();
+  const { form, eventSchemaDraft } = useCampaignForm();
   const { submit, saving } = useCampaignCreateSubmit();
+  const tenantId = useOnboardingStore((s) => s.tenantId);
+  const { resolveLabel } = useProgrammeDropdown(tenantId, form.programmeUid);
 
   return (
     <CreateCampaignShell title="Review">
@@ -32,18 +34,22 @@ export default function CreateCampaignReviewPage() {
           <div>
             <p className="text-sm font-semibold">Review your campaign</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Confirm details below, then save as draft or activate immediately.
+              Confirm details below, then save as draft to finish.
             </p>
           </div>
           <Separator />
           <dl>
+            <ReviewRow label="Programme" value={resolveLabel(form.programmeUid)} />
             <ReviewRow label="Name" value={form.name} />
             {form.description ? <ReviewRow label="Description" value={form.description} /> : null}
             <ReviewRow
               label="Schedule"
               value={`${form.validFromLocal || "—"} → ${form.validUntilLocal || "—"}`}
             />
-            <ReviewRow label="Event types" value={formatTriggerEventTypesLabel(form.triggerEventType)} />
+            <ReviewRow
+              label="Event schema"
+              value={summarizeCampaignCreateEventSchema(eventSchemaDraft)}
+            />
             <ReviewRow label="Budget" value={form.budgetTotal} />
             <ReviewRow label="Alert threshold %" value={form.alertThresholdPct} />
           </dl>
@@ -59,22 +65,9 @@ export default function CreateCampaignReviewPage() {
           >
             {saving === "draft" ? "Saving…" : "Save as draft"}
           </Button>
-          <Button
-            type="button"
-            className="rounded-full"
-            disabled={saving !== null}
-            onClick={() => submit("activate")}
-          >
-            {saving === "activate" ? "Activating…" : "Save and activate"}
-          </Button>
-          <Link href="/dashboard/campaigns">
-            <Button type="button" variant="ghost" className="rounded-full" disabled={saving !== null}>
-              Cancel
-            </Button>
-          </Link>
         </div>
 
-        <CampaignCreateStepNav stepIndex={2} />
+        <CampaignCreateStepNav stepIndex={3} />
       </div>
     </CreateCampaignShell>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
 import { CreateRuleShell } from "@/app/dashboard/loyalty-rules/create/_components/CreateRuleShell";
@@ -12,7 +12,12 @@ import {
   parseTriggerEventTypes,
 } from "@/lib/campaigns/trigger-event-types";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
-import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
+import {
+  clearRuleDraft,
+  isEditingExistingRuleDraft,
+  loadRuleDraft,
+  saveRuleDraftFields,
+} from "@/lib/store/rule-draft-storage";
 import type { CampaignResponse } from "@/types/campaigns";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,11 +26,24 @@ import { NativeSelect } from "@/components/ui/native-select";
 
 export default function CreateCampaignRuleCampaignPage() {
   const router = useRouter();
+  const search = useSearchParams();
   const tenantId = useOnboardingStore((s) => s.tenantId) ?? "";
   const { basePath } = useRuleCreateFlow();
   const [campaigns, setCampaigns] = useState<CampaignResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUid, setSelectedUid] = useState("");
+
+  useEffect(() => {
+    if (!tenantId) return;
+    if (search.get("new") === "1") {
+      clearRuleDraft(tenantId, "campaign");
+      return;
+    }
+    const draft = loadRuleDraft(tenantId, "campaign");
+    if (!isEditingExistingRuleDraft(draft) && draft?.ruleUid) {
+      saveRuleDraftFields(tenantId, { ruleUid: undefined, draftIntent: "create" }, "campaign");
+    }
+  }, [tenantId, search]);
 
   useEffect(() => {
     let alive = true;
@@ -53,7 +71,7 @@ export default function CreateCampaignRuleCampaignPage() {
   }, [tenantId]);
 
   const selected = campaigns.find((c) => c.campaignUid === selectedUid);
-  const selectedEvents = selected ? parseTriggerEventTypes(selected.triggerEventType) : [];
+  const configuredEvents = selected ? parseTriggerEventTypes(selected.triggerEventType) : [];
 
   const onNext = () => {
     if (!tenantId) {
@@ -62,10 +80,6 @@ export default function CreateCampaignRuleCampaignPage() {
     }
     if (!selected) {
       toast.error("Select a campaign to continue.");
-      return;
-    }
-    if (selectedEvents.length === 0) {
-      toast.error("This campaign has no event types. Edit the campaign and add at least one event type.");
       return;
     }
 
@@ -86,6 +100,7 @@ export default function CreateCampaignRuleCampaignPage() {
         executionMode: existing?.executionMode ?? "ALL_MATCHING",
         conditionTree: existing?.conditionTree ?? {},
         actions: existing?.actions ?? [{ actionType: "AWARD_POINTS", formula: "event.amount * 0.01" }],
+        ...(campaignChanged ? { ruleUid: undefined, draftIntent: "create" as const } : {}),
       },
       "campaign"
     );
@@ -96,8 +111,8 @@ export default function CreateCampaignRuleCampaignPage() {
     <CreateRuleShell title="Campaigns">
       <Card className="p-6 border-border/70 bg-[var(--surface-card)] space-y-5">
         <p className="text-sm text-muted-foreground">
-          Step 1 — Choose the campaign. On the next step you will pick one of that campaign&apos;s event types,
-          then configure the earn rule.
+          Step 1 — Choose the campaign. On the next step you will pick a trigger event type from the
+          campaign or programme schema, then configure the earn rule.
         </p>
 
         {loading ? (
@@ -135,16 +150,13 @@ export default function CreateCampaignRuleCampaignPage() {
                   <span className="font-medium">{selected.programmeUid}</span>
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Event types on this campaign:</span>{" "}
+                  <span className="text-muted-foreground">Event types on campaign (if any):</span>{" "}
                   <span className="font-mono font-medium">
-                    {formatTriggerEventTypesLabel(selected.triggerEventType)}
+                    {configuredEvents.length > 0
+                      ? formatTriggerEventTypesLabel(selected.triggerEventType)
+                      : "None yet — pick from schema on the next step"}
                   </span>
                 </p>
-                {selectedEvents.length === 0 ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    This campaign has no event types yet. Add them in campaign settings before creating a rule.
-                  </p>
-                ) : null}
               </div>
             ) : null}
             <div className="flex justify-end pt-2">
@@ -152,7 +164,7 @@ export default function CreateCampaignRuleCampaignPage() {
                 type="button"
                 className="rounded-full"
                 onClick={onNext}
-                disabled={!selectedUid || selectedEvents.length === 0}
+                disabled={!selectedUid}
               >
                 Next: Events →
               </Button>

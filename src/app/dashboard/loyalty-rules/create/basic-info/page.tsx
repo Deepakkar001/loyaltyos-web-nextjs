@@ -6,6 +6,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { useSearchParams } from "next/navigation";
 
 import { CreateRuleShell } from "../_components/CreateRuleShell";
 import { Card } from "@/components/ui/card";
@@ -17,7 +18,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { FieldHelp } from "@/components/ui/field-help";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
-import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
+import {
+  clearRuleDraft,
+  isEditingExistingRuleDraft,
+  loadRuleDraft,
+  saveRuleDraftFields,
+} from "@/lib/store/rule-draft-storage";
 import { cn } from "@/lib/utils";
 import { programmeApiV2, ApiError } from "@/lib/api/client";
 import {
@@ -39,6 +45,7 @@ type FormData = z.input<typeof schema>;
 export default function CreateRuleBasicInfoPage() {
   const router = useRouter();
   const tenantId = useOnboardingStore((s) => s.tenantId) ?? "";
+  const search = useSearchParams();
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -91,8 +98,24 @@ export default function CreateRuleBasicInfoPage() {
 
   useEffect(() => {
     if (!tenantId) return;
+    if (search.get("new") === "1") {
+      clearRuleDraft(tenantId, "programme");
+      form.reset({
+        programmeUid: "default",
+        name: "",
+        description: "",
+        priority: 10,
+        triggerEventType: "PURCHASE",
+        executionMode: "ALL_MATCHING",
+      });
+      setDraftBootstrapKey((k) => k + 1);
+      return;
+    }
     const existing = loadRuleDraft(tenantId);
     if (!existing) return;
+    if (!isEditingExistingRuleDraft(existing) && existing.ruleUid) {
+      saveRuleDraftFields(tenantId, { ruleUid: undefined, draftIntent: "create" });
+    }
     form.reset({
       programmeUid: existing.programmeUid ?? "default",
       name: existing.name ?? "",
@@ -102,7 +125,7 @@ export default function CreateRuleBasicInfoPage() {
       executionMode: existing.executionMode ?? "ALL_MATCHING",
     });
     setDraftBootstrapKey((k) => k + 1);
-  }, [tenantId, form]);
+  }, [tenantId, form, search]);
 
   useEffect(() => {
     if (!tenantId) return;

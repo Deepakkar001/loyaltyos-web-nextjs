@@ -33,6 +33,9 @@ export function resolveSingleTriggerForCampaignRule(
     );
   }
   const single = parts[0];
+  if (allowed.length === 0) {
+    return single;
+  }
   if (!allowed.includes(single)) {
     throw new Error(
       `Event type must be one of the campaign types: ${allowed.join(", ") || "—"}`

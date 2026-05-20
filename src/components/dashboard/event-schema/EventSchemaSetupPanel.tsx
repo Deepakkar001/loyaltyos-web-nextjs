@@ -1,75 +1,51 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
-import { PillToggle } from "@/components/ui/pill-toggle";
-import { programmeApiV2, ApiError, ensureAuthSession } from "@/lib/api/client";
+import { campaignsAdminApi, programmeApiV2, ApiError, ensureAuthSession } from "@/lib/api/client";
 import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
 import {
   buildEventSchemaJsonNode,
   defaultEventSchemaDraft,
+  eventSchemaDraftFromCampaign,
   eventSchemaDraftFromConfigRoot,
   isLikelyCompleteProgrammeConfig,
   mergeEventSchemaIntoProgrammeConfig,
-  type EventSchemaCoreFieldDraft,
-  type EventSchemaCustomFieldDraft,
   type EventSchemaDraft,
-  type EventSchemaFieldType,
 } from "@/lib/programme/event-schema-merge";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import type { CampaignResponse } from "@/types/campaigns";
 import { cn } from "@/lib/utils";
 
-const FIELD_TYPE_OPTIONS: { value: EventSchemaFieldType; label: string }[] = [
-  { value: "string", label: "string" },
-  { value: "number", label: "number" },
-  { value: "integer", label: "integer" },
-  { value: "boolean", label: "boolean" },
-  { value: "date-time", label: "date-time" },
-  { value: "object", label: "object" },
-];
+import { EventSchemaEditorForm, ReadOnlyEventSchema } from "./EventSchemaEditor";
+import {
+  cloneEventSchemaDraft,
+  createEventSchemaMutators,
+  validateEventSchemaDraft,
+} from "./event-schema-editor-utils";
 
-const NAME_RE = /^[a-zA-Z][a-zA-Z0-9_]*$/;
-const EVENT_TYPE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+type SchemaScope = "programme" | "campaign";
 
-function cloneDraft(d: EventSchemaDraft): EventSchemaDraft {
-  return JSON.parse(JSON.stringify(d)) as EventSchemaDraft;
-}
-
-function validateDraft(d: EventSchemaDraft): string | null {
-  for (const def of d.eventDefinitions) {
-    if (!def.eventType.trim()) return "Each event definition needs an event type.";
-    if (!EVENT_TYPE_RE.test(def.eventType.trim())) return `Invalid event type: ${def.eventType}`;
-    if (!def.coreFields.length) return `Add at least one core field for ${def.eventType}.`;
-    for (const f of def.coreFields) {
-      if (!f.name.trim()) return "Core field names cannot be empty.";
-      if (!NAME_RE.test(f.name.trim())) return `Invalid core field name: ${f.name}`;
-    }
-  }
-  for (const c of d.customFields) {
-    if (!c.name.trim()) return "Custom field names cannot be empty.";
-    if (!NAME_RE.test(c.name.trim())) return `Invalid custom field name: ${c.name}`;
-  }
-  if (d.backwardCompatibilityDays < 0 || d.backwardCompatibilityDays > 365) {
-    return "Backward compatibility days must be between 0 and 365.";
-  }
-  return null;
-}
+const TERMINAL_CAMPAIGN_STATUSES = new Set(["ENDED", "EXHAUSTED", "EXPIRED"]);
 
 export function EventSchemaSetupPanel() {
   const tenantId = useOnboardingStore((s) => s.tenantId);
 
+  const [scope, setScope] = useState<SchemaScope>("programme");
   const [programmeRows, setProgrammeRows] = useState<Array<{ programmeUid: string; name: string }>>([
     { programmeUid: "default", name: "Default programme" },
   ]);
   const [programmeUid, setProgrammeUid] = useState("default");
+  const [campaignRows, setCampaignRows] = useState<CampaignResponse[]>([]);
+  const [campaignUid, setCampaignUid] = useState("");
+
   const [loadingList, setLoadingList] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -79,10 +55,22 @@ export function EventSchemaSetupPanel() {
   const [configVersion, setConfigVersion] = useState(0);
   const [draft, setDraft] = useState<EventSchemaDraft>(defaultEventSchemaDraft());
   const [baselineDraft, setBaselineDraft] = useState<EventSchemaDraft>(defaultEventSchemaDraft());
+  const mutators = useMemo(() => createEventSchemaMutators(setDraft), []);
 
   const programmeLabel = useMemo(
     () => programmeRows.find((p) => p.programmeUid === programmeUid)?.name ?? programmeUid,
     [programmeRows, programmeUid]
+  );
+
+  const selectedCampaign = useMemo(
+    () => campaignRows.find((c) => c.campaignUid === campaignUid),
+    [campaignRows, campaignUid]
+  );
+
+  const campaignLabel = selectedCampaign?.name ?? campaignUid;
+
+  const campaignSchemaLocked = Boolean(
+    selectedCampaign && TERMINAL_CAMPAIGN_STATUSES.has(selectedCampaign.status)
   );
 
   const loadProgrammes = useCallback(async () => {
@@ -99,7 +87,24 @@ export function EventSchemaSetupPanel() {
     }
   }, [tenantId]);
 
-  const loadConfig = useCallback(async () => {
+  const loadCampaigns = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      await ensureAuthSession();
+      const list = await campaignsAdminApi.listCampaigns({ programmeUid });
+      setCampaignRows(list);
+      if (list.length && !list.some((c) => c.campaignUid === campaignUid)) {
+        setCampaignUid(list[0].campaignUid);
+      }
+      if (list.length === 0) {
+        setCampaignUid("");
+      }
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+    }
+  }, [tenantId, programmeUid, campaignUid]);
+
+  const loadProgrammeSchema = useCallback(async () => {
     if (!tenantId) return;
     setLoadingConfig(true);
     setConfigMissing(false);
@@ -108,21 +113,18 @@ export function EventSchemaSetupPanel() {
       const blob = await programmeApiV2.getProgrammeConfig(programmeUid);
       setResponseTenantId(blob.tenantId);
       setConfigVersion(blob.configVersion);
-      if (blob.tenantId && tenantId && blob.tenantId !== tenantId) {
-        toast.error("Loaded configuration does not match the signed-in tenant.");
-      }
       const root = (blob.config ?? {}) as Record<string, unknown>;
       if (!isLikelyCompleteProgrammeConfig(root)) {
         setConfigMissing(true);
         const empty = defaultEventSchemaDraft();
         setDraft(empty);
-        setBaselineDraft(cloneDraft(empty));
+        setBaselineDraft(cloneEventSchemaDraft(empty));
         return;
       }
       setConfigMissing(false);
       const d = eventSchemaDraftFromConfigRoot(root);
       setDraft(d);
-      setBaselineDraft(cloneDraft(d));
+      setBaselineDraft(cloneEventSchemaDraft(d));
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
       setConfigMissing(true);
@@ -131,21 +133,57 @@ export function EventSchemaSetupPanel() {
     }
   }, [tenantId, programmeUid]);
 
+  const loadCampaignSchema = useCallback(async () => {
+    if (!tenantId || !campaignUid) return;
+    setLoadingConfig(true);
+    try {
+      await ensureAuthSession();
+      const [campaign, progBlob] = await Promise.all([
+        campaignsAdminApi.getCampaign(campaignUid),
+        programmeApiV2.getProgrammeConfig(programmeUid).catch(() => null),
+      ]);
+      const progRoot = (progBlob?.config ?? {}) as Record<string, unknown>;
+      setConfigMissing(false);
+      const d = eventSchemaDraftFromCampaign({
+        eventSchema: campaign.eventSchema,
+        triggerEventType: campaign.triggerEventType,
+        programmeConfigRoot: progRoot,
+      });
+      setDraft(d);
+      setBaselineDraft(cloneEventSchemaDraft(d));
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+    } finally {
+      setLoadingConfig(false);
+    }
+  }, [tenantId, campaignUid, programmeUid]);
+
   useEffect(() => {
     void loadProgrammes();
   }, [loadProgrammes]);
 
   useEffect(() => {
-    void loadConfig();
-  }, [loadConfig]);
+    if (scope === "campaign") {
+      void loadCampaigns();
+    }
+  }, [scope, loadCampaigns]);
+
+  useEffect(() => {
+    setEditing(false);
+    if (scope === "programme") {
+      void loadProgrammeSchema();
+    } else if (campaignUid) {
+      void loadCampaignSchema();
+    }
+  }, [scope, loadProgrammeSchema, loadCampaignSchema, campaignUid]);
 
   const cancelEdit = () => {
-    setDraft(cloneDraft(baselineDraft));
+    setDraft(cloneEventSchemaDraft(baselineDraft));
     setEditing(false);
   };
 
-  const persist = async () => {
-    const err = validateDraft(draft);
+  const persistProgramme = async () => {
+    const err = validateEventSchemaDraft(draft);
     if (err) {
       toast.error(err);
       return;
@@ -166,9 +204,9 @@ export function EventSchemaSetupPanel() {
       }
       const merged = mergeEventSchemaIntoProgrammeConfig(root, draft);
       await programmeApiV2.upsertProgrammeConfig(programmeUid, { config: merged });
-      toast.success("Event schema saved");
+      toast.success("Programme event schema saved");
       setEditing(false);
-      await loadConfig();
+      await loadProgrammeSchema();
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
       else toast.error("Save failed");
@@ -177,142 +215,236 @@ export function EventSchemaSetupPanel() {
     }
   };
 
-  const updateEventType = (idx: number, eventType: string) => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      next.eventDefinitions[idx] = { ...next.eventDefinitions[idx], eventType };
-      return next;
-    });
-  };
-
-  const updateCoreField = (defIdx: number, fieldIdx: number, patch: Partial<EventSchemaCoreFieldDraft>) => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      const fields = [...next.eventDefinitions[defIdx].coreFields];
-      fields[fieldIdx] = { ...fields[fieldIdx], ...patch };
-      next.eventDefinitions[defIdx] = { ...next.eventDefinitions[defIdx], coreFields: fields };
-      return next;
-    });
-  };
-
-  const addCoreField = (defIdx: number) => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      const fields = [...next.eventDefinitions[defIdx].coreFields];
-      fields.push({ name: "", type: "string", required: false });
-      next.eventDefinitions[defIdx] = { ...next.eventDefinitions[defIdx], coreFields: fields };
-      return next;
-    });
-  };
-
-  const removeCoreField = (defIdx: number, fieldIdx: number) => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      const fields = next.eventDefinitions[defIdx].coreFields.filter((_, i) => i !== fieldIdx);
-      next.eventDefinitions[defIdx] = { ...next.eventDefinitions[defIdx], coreFields: fields };
-      return next;
-    });
-  };
-
-  const addEventDefinition = () => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      next.eventDefinitions.push({
-        eventType: `EVENT_${next.eventDefinitions.length + 1}`,
-        coreFields: [
-          { name: "transactionId", type: "string", required: true },
-          { name: "eventType", type: "string", required: true },
-        ],
+  const persistCampaign = async () => {
+    const err = validateEventSchemaDraft(draft);
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    if (!tenantId || !campaignUid) return;
+    if (campaignSchemaLocked) {
+      toast.error("Cannot edit schema for a ended or expired campaign.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await ensureAuthSession();
+      await campaignsAdminApi.upsertCampaignEventSchema(campaignUid, {
+        eventSchema: buildEventSchemaJsonNode(draft),
       });
-      return next;
-    });
+      toast.success("Campaign event schema saved");
+      setEditing(false);
+      await loadCampaignSchema();
+      await loadCampaigns();
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+      else toast.error("Save failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const removeEventDefinition = (idx: number) => {
-    setDraft((prev) => {
-      if (prev.eventDefinitions.length <= 1) return prev;
-      const next = cloneDraft(prev);
-      next.eventDefinitions.splice(idx, 1);
-      return next;
-    });
-  };
-
-  const updateCustomField = (idx: number, patch: Partial<EventSchemaCustomFieldDraft>) => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      next.customFields[idx] = { ...next.customFields[idx], ...patch };
-      return next;
-    });
-  };
-
-  const addCustomField = () => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      next.customFields.push({ name: "", type: "string", required: false, dependsOn: "" });
-      return next;
-    });
-  };
-
-  const removeCustomField = (idx: number) => {
-    setDraft((prev) => {
-      const next = cloneDraft(prev);
-      next.customFields.splice(idx, 1);
-      return next;
-    });
-  };
+  const persist = scope === "programme" ? persistProgramme : persistCampaign;
 
   const previewJson = useMemo(() => JSON.stringify(buildEventSchemaJsonNode(draft), null, 2), [draft]);
+
+  const showProgrammeMissing = scope === "programme" && configMissing;
+  const showCampaignEmpty = scope === "campaign" && campaignRows.length === 0;
+  const showSchemaSection = !showProgrammeMissing && !showCampaignEmpty;
+
+  return (
+    <SchemaSetupPanelView
+      scope={scope}
+      setScope={setScope}
+      programmeRows={programmeRows}
+      programmeUid={programmeUid}
+      setProgrammeUid={setProgrammeUid}
+      campaignRows={campaignRows}
+      campaignUid={campaignUid}
+      setCampaignUid={setCampaignUid}
+      loadingList={loadingList}
+      loadingConfig={loadingConfig}
+      programmeLabel={programmeLabel}
+      campaignLabel={campaignLabel}
+      selectedCampaign={selectedCampaign}
+      campaignSchemaLocked={campaignSchemaLocked}
+      responseTenantId={responseTenantId}
+      configVersion={configVersion}
+      showProgrammeMissing={showProgrammeMissing}
+      showCampaignEmpty={showCampaignEmpty}
+      showSchemaSection={showSchemaSection}
+      editing={editing}
+      setEditing={setEditing}
+      saving={saving}
+      cancelEdit={cancelEdit}
+      persist={persist}
+      draft={draft}
+      setDraft={setDraft}
+      mutators={mutators}
+      previewJson={previewJson}
+    />
+  );
+}
+
+function SchemaSetupPanelView(props: {
+  scope: SchemaScope;
+  setScope: (s: SchemaScope) => void;
+  programmeRows: Array<{ programmeUid: string; name: string }>;
+  programmeUid: string;
+  setProgrammeUid: (v: string) => void;
+  campaignRows: CampaignResponse[];
+  campaignUid: string;
+  setCampaignUid: (v: string) => void;
+  loadingList: boolean;
+  loadingConfig: boolean;
+  programmeLabel: string;
+  campaignLabel: string;
+  selectedCampaign?: CampaignResponse;
+  campaignSchemaLocked: boolean;
+  responseTenantId: string | null;
+  configVersion: number;
+  showProgrammeMissing: boolean;
+  showCampaignEmpty: boolean;
+  showSchemaSection: boolean;
+  editing: boolean;
+  setEditing: (v: boolean) => void;
+  saving: boolean;
+  cancelEdit: () => void;
+  persist: () => void;
+  draft: EventSchemaDraft;
+  setDraft: Dispatch<SetStateAction<EventSchemaDraft>>;
+  mutators: ReturnType<typeof createEventSchemaMutators>;
+  previewJson: string;
+}) {
+  const {
+    scope,
+    setScope,
+    programmeRows,
+    programmeUid,
+    setProgrammeUid,
+    campaignRows,
+    campaignUid,
+    setCampaignUid,
+    loadingList,
+    loadingConfig,
+    programmeLabel,
+    campaignLabel,
+    selectedCampaign,
+    campaignSchemaLocked,
+    responseTenantId,
+    configVersion,
+    showProgrammeMissing,
+    showCampaignEmpty,
+    showSchemaSection,
+    editing,
+    setEditing,
+    saving,
+    cancelEdit,
+    persist,
+    draft,
+    setDraft,
+    mutators,
+    previewJson,
+  } = props;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
+          <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">Event schema</h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Schema stored in <code className="text-foreground">programme_config.config_json</code> for your tenant. Select a
-            programme, review fields per event type, then edit and save to create a new config version.
+            Configure JSON payload fields per event type for your <strong>programme</strong> (tenant-wide rules) or per{" "}
+            <strong>campaign</strong> (campaign earn rules). Campaign schemas are stored on each campaign record.
           </p>
         </div>
-        {responseTenantId ? (
+        {responseTenantId && scope === "programme" ? (
           <p className="text-xs text-muted-foreground shrink-0">
             Tenant <span className="font-mono text-foreground">{responseTenantId}</span>
-            {configVersion > 0 ? (
-              <>
-                {" "}
-                · v{configVersion}
-              </>
-            ) : null}
+            {configVersion > 0 ? <> · v{configVersion}</> : null}
           </p>
         ) : null}
       </div>
 
       <Card className="rounded-2xl border border-border/70 bg-card/80 p-4 sm:p-6 space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="inline-flex rounded-full border border-border bg-[var(--surface-sunken)] p-1">
+            <button
+              type="button"
+              onClick={() => setScope("programme")}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-xs font-semibold transition-all",
+                scope === "programme"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Programme schema
+            </button>
+            <button
+              type="button"
+              onClick={() => setScope("campaign")}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-xs font-semibold transition-all",
+                scope === "campaign"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Campaign schema
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1 min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Programme</p>
-            <NativeSelect
-              ariaLabel="Programme"
-              className="max-w-md"
-              value={programmeUid}
-              disabled={loadingList || loadingConfig}
-              onChange={(v) => {
-                setProgrammeUid(v);
-                setEditing(false);
-              }}
-              options={programmeRows.map((p) => ({ value: p.programmeUid, label: p.name }))}
-            />
+          <div className="space-y-3 min-w-0 flex-1">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Programme</p>
+              <NativeSelect
+                ariaLabel="Programme"
+                className="max-w-md"
+                value={programmeUid}
+                disabled={loadingList || loadingConfig}
+                onChange={(v) => {
+                  setProgrammeUid(v);
+                  setEditing(false);
+                }}
+                options={programmeRows.map((p) => ({ value: p.programmeUid, label: p.name }))}
+              />
+            </div>
+            {scope === "campaign" ? (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Campaign</p>
+                <NativeSelect
+                  ariaLabel="Campaign"
+                  className="max-w-md"
+                  value={campaignUid}
+                  disabled={loadingList || loadingConfig || campaignRows.length === 0}
+                  onChange={(v) => {
+                    setCampaignUid(v);
+                    setEditing(false);
+                  }}
+                  options={
+                    campaignRows.length === 0
+                      ? [{ value: "", label: "No campaigns for this programme" }]
+                      : campaignRows.map((c) => ({
+                          value: c.campaignUid,
+                          label: `${c.name} (${c.status})`,
+                        }))
+                  }
+                />
+              </div>
+            ) : null}
           </div>
           <Badge variant="secondary" className="shrink-0 self-start lg:self-center max-w-full truncate">
-            {programmeLabel}
+            {scope === "programme" ? programmeLabel : campaignLabel || "—"}
           </Badge>
         </div>
 
-        {configMissing ? (
+        {showProgrammeMissing ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
             <p className="font-medium text-foreground">No saved programme configuration for this programme yet.</p>
             <p className="mt-1 text-muted-foreground">
-              Complete <strong>Configure Programme</strong> first so a valid config exists, then return here to view or adjust
-              the event schema slice only.
+              Complete <strong>Configure Programme</strong> first so a valid config exists, then return here.
             </p>
             <Link
               href={`/dashboard/configure?programmeUid=${encodeURIComponent(programmeUid)}`}
@@ -323,18 +455,28 @@ export function EventSchemaSetupPanel() {
           </div>
         ) : null}
 
-        {!configMissing ? (
+        {showCampaignEmpty ? <CampaignEmptyState /> : null}
+
+        {showSchemaSection ? (
           <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Event Schema (custom fields)
+                  {scope === "programme" ? "Programme event schema" : "Campaign event schema"}
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground leading-relaxed max-w-3xl">
-                  For each event type your systems emit, declare which fields appear on the JSON payload. Mark a field required
-                  only when every producer will send it. A combined field list is stored automatically for backwards compatibility
-                  with the rule engine.
+                  {scope === "programme"
+                    ? "Stored in programme_config.config_json.eventSchema. Used by programme earn rules and as the default template for campaigns."
+                    : "Stored in campaigns.event_schema. Used by campaign earn rules for condition fields. Saving also updates the campaign event type list."}
                 </p>
+                {scope === "campaign" && selectedCampaign ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Status: <span className="font-medium text-foreground">{selectedCampaign.status}</span>
+                    {campaignSchemaLocked ? (
+                      <span className="ml-2 text-amber-700 dark:text-amber-300">Schema cannot be edited.</span>
+                    ) : null}
+                  </p>
+                ) : null}
               </div>
               {!editing ? (
                 <Button
@@ -343,7 +485,7 @@ export function EventSchemaSetupPanel() {
                   size="sm"
                   className="shrink-0 gap-2"
                   onClick={() => setEditing(true)}
-                  disabled={loadingConfig}
+                  disabled={loadingConfig || (scope === "campaign" && campaignSchemaLocked)}
                 >
                   <Pencil className="h-4 w-4" />
                   Edit
@@ -353,7 +495,13 @@ export function EventSchemaSetupPanel() {
                   <Button type="button" variant="ghost" size="sm" onClick={cancelEdit} disabled={saving}>
                     Cancel
                   </Button>
-                  <Button type="button" size="sm" className="bg-brand-600 hover:bg-brand-700 text-white" onClick={persist} disabled={saving}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-brand-600 hover:bg-brand-700 text-white"
+                    onClick={persist}
+                    disabled={saving}
+                  >
                     {saving ? "Saving…" : "Save changes"}
                   </Button>
                 </div>
@@ -365,187 +513,17 @@ export function EventSchemaSetupPanel() {
             ) : !editing ? (
               <ReadOnlyEventSchema draft={draft} />
             ) : (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-muted-foreground" htmlFor="bcd">
-                      Backward compatibility (days)
-                    </label>
-                    <Input
-                      id="bcd"
-                      type="number"
-                      min={0}
-                      max={365}
-                      value={draft.backwardCompatibilityDays}
-                      onChange={(e) =>
-                        setDraft((p) => ({
-                          ...cloneDraft(p),
-                          backwardCompatibilityDays: Number(e.target.value) || 0,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-muted-foreground" htmlFor="esv">
-                      Schema version
-                    </label>
-                    <Input
-                      id="esv"
-                      type="number"
-                      min={1}
-                      value={draft.version}
-                      onChange={(e) =>
-                        setDraft((p) => ({
-                          ...cloneDraft(p),
-                          version: Math.max(1, Number(e.target.value) || 1),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {draft.eventDefinitions.map((def, defIdx) => (
-                    <div key={`${def.eventType}-${defIdx}`} className="rounded-xl border border-border/70 bg-background p-4 space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <label className="text-xs font-semibold text-muted-foreground" htmlFor={`et-${defIdx}`}>
-                            Event type key
-                          </label>
-                          <Input
-                            id={`et-${defIdx}`}
-                            className="h-9 max-w-md"
-                            value={def.eventType}
-                            onChange={(e) => updateEventType(defIdx, e.target.value)}
-                          />
-                        </div>
-                        {draft.eventDefinitions.length > 1 ? (
-                          <Button type="button" variant="ghost" size="sm" className="text-red-600 shrink-0" onClick={() => removeEventDefinition(defIdx)}>
-                            Remove event
-                          </Button>
-                        ) : null}
-                      </div>
-                      <div className="space-y-2 pl-0 sm:pl-3 border-l-2 border-border/50">
-                        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Fields in payload</p>
-                        {def.coreFields.map((f, fi) => (
-                          <div
-                            key={`${defIdx}-${fi}-${f.name}`}
-                            className="flex flex-col lg:flex-row lg:items-center gap-2 p-3 rounded-xl border border-border/70 bg-[var(--surface-sunken)]"
-                          >
-                            <Input
-                              className="h-8 lg:w-44"
-                              placeholder="fieldName"
-                              value={f.name}
-                              onChange={(e) => updateCoreField(defIdx, fi, { name: e.target.value })}
-                            />
-                            <NativeSelect
-                              ariaLabel="Field type"
-                              variant="compact"
-                              className="lg:w-40"
-                              value={f.type}
-                              onChange={(v) => updateCoreField(defIdx, fi, { type: v as EventSchemaFieldType })}
-                              options={FIELD_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                            />
-                            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 lg:min-w-[200px]">
-                              <span className="text-sm font-medium text-foreground">{f.required ? "Required" : "Optional"}</span>
-                              <PillToggle
-                                pressed={f.required}
-                                onPressedChange={(v) => updateCoreField(defIdx, fi, { required: v })}
-                                srLabel={f.required ? "Turn off: mark core field as optional" : "Turn on: mark core field as required"}
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => removeCoreField(defIdx, fi)}
-                              className="lg:ml-auto text-slate-400 hover:text-red-500 transition-colors"
-                              aria-label="Remove field"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                        <Button type="button" variant="outline" size="sm" className="w-full border-dashed text-slate-500" onClick={() => addCoreField(defIdx)}>
-                          <Plus className="w-3.5 h-3.5 mr-2" />
-                          Add core field
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  <Button type="button" variant="outline" size="sm" className="w-full border-dashed text-slate-500" onClick={addEventDefinition}>
-                    <Plus className="w-3.5 h-3.5 mr-2" />
-                    Add another event type
-                  </Button>
-                </div>
-
-                <div className="rounded-xl border border-border/70 bg-[var(--surface-sunken)] p-4 space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Custom fields</h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    Applied across event types. Optional <strong>depends on</strong> is stored as{" "}
-                    <code className="text-foreground">validation.dependsOn</code> in config JSON.
-                  </p>
-                  {draft.customFields.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No custom fields yet.</p>
-                  ) : null}
-                  {draft.customFields.map((c, ci) => (
-                    <div
-                      key={`cf-${ci}`}
-                      className="flex flex-col xl:flex-row xl:items-center gap-2 p-3 rounded-xl border border-border/70 bg-background"
-                    >
-                      <Input
-                        className="h-8 xl:w-40"
-                        placeholder="fieldName"
-                        value={c.name}
-                        onChange={(e) => updateCustomField(ci, { name: e.target.value })}
-                      />
-                      <NativeSelect
-                        ariaLabel="Custom field type"
-                        variant="compact"
-                        className="xl:w-36"
-                        value={c.type}
-                        onChange={(v) => updateCustomField(ci, { type: v as EventSchemaFieldType })}
-                        options={FIELD_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                      />
-                      <Input
-                        className="h-8 xl:w-44"
-                        placeholder="Depends on (field name)"
-                        value={c.dependsOn ?? ""}
-                        onChange={(e) => updateCustomField(ci, { dependsOn: e.target.value })}
-                      />
-                      <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 min-w-[200px]">
-                        <span className="text-sm font-medium text-foreground">{c.required ? "Required" : "Optional"}</span>
-                        <PillToggle
-                          size="sm"
-                          pressed={c.required}
-                          onPressedChange={(v) => updateCustomField(ci, { required: v })}
-                          srLabel={
-                            c.required ? "Turn off: mark custom field as optional" : "Turn on: mark custom field as required"
-                          }
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeCustomField(ci)}
-                        className="xl:ml-auto text-slate-400 hover:text-red-500 transition-colors"
-                        aria-label="Remove custom field"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                  <Button type="button" variant="outline" size="sm" className="w-full border-dashed" onClick={addCustomField}>
-                    <Plus className="w-3.5 h-3.5 mr-2" />
-                    Add custom field
-                  </Button>
-                </div>
-              </div>
+              <EventSchemaEditorForm draft={draft} setDraft={setDraft} mutators={mutators} />
             )}
           </div>
         ) : null}
 
-        {!configMissing && !editing ? (
+        {showSchemaSection && !editing ? (
           <details className="rounded-xl border border-border/60 bg-muted/20 p-3">
             <summary className="text-xs font-medium cursor-pointer text-muted-foreground">Raw eventSchema JSON</summary>
-            <pre className="mt-2 text-xs overflow-auto max-h-64 rounded-lg bg-background p-3 border border-border">{previewJson}</pre>
+            <pre className="mt-2 text-xs overflow-auto max-h-64 rounded-lg bg-background p-3 border border-border">
+              {previewJson}
+            </pre>
           </details>
         ) : null}
       </Card>
@@ -553,57 +531,17 @@ export function EventSchemaSetupPanel() {
   );
 }
 
-function ReadOnlyEventSchema({ draft }: { draft: EventSchemaDraft }) {
+function CampaignEmptyState() {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-4 text-sm">
-        <span className="text-muted-foreground">
-          Version <span className="font-medium text-foreground">{draft.version}</span>
-        </span>
-        <span className="text-muted-foreground">
-          Backward compatibility{" "}
-          <span className="font-medium text-foreground">{draft.backwardCompatibilityDays} days</span>
-        </span>
-      </div>
-      {draft.eventDefinitions.map((def, di) => (
-        <div key={`${def.eventType}-${di}`} className="rounded-xl border border-border/70 bg-background p-4 space-y-2">
-          <p className="text-sm font-semibold">
-            Event <code className="text-brand-700 dark:text-brand-300">{def.eventType}</code>
-          </p>
-          <ul className="divide-y divide-border/60 rounded-lg border border-border/60 overflow-hidden">
-            {def.coreFields.map((f, fi) => (
-              <li key={`${di}-${fi}-${f.name}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm bg-[var(--surface-sunken)]">
-                <span className="font-mono text-xs">{f.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {f.type}
-                  {f.required ? <span className="ml-2 text-amber-700 dark:text-amber-400">required</span> : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-      <div className="rounded-xl border border-border/70 bg-background p-4 space-y-2">
-        <p className="text-sm font-semibold">Custom fields</p>
-        {draft.customFields.length === 0 ? (
-          <p className="text-xs text-muted-foreground">None</p>
-        ) : (
-          <ul className="divide-y divide-border/60 rounded-lg border border-border/60 overflow-hidden">
-            {draft.customFields.map((c, ci) => (
-              <li key={`${ci}-${c.name}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm bg-[var(--surface-sunken)]">
-                <span className="font-mono text-xs">{c.name}</span>
-                <span className={cn("text-xs text-muted-foreground shrink-0 text-right")}>
-                  {c.type}
-                  {c.required ? <span className="ml-2 text-amber-700 dark:text-amber-400">required</span> : null}
-                  {c.dependsOn ? (
-                    <span className="block text-[10px] mt-0.5">depends on {c.dependsOn}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm space-y-3">
+      <p className="font-medium text-foreground">No campaigns for this programme.</p>
+      <p className="text-muted-foreground">Create a campaign first, then define its per-event payload schema here.</p>
+      <Link
+        href="/dashboard/campaigns/create"
+        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "inline-flex")}
+      >
+        Create campaign
+      </Link>
     </div>
   );
 }

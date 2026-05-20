@@ -10,18 +10,16 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { ComparisonOp, ConditionField } from "../../../condition-builder/types";
-import { FIELD_METADATA, OPERATOR_LABELS, OPERATORS_BY_TYPE, OPERATORS_WITH_ANY_TYPE, type ConditionNodeData } from "../../types";
+import { OPERATOR_LABELS, type ConditionNodeData } from "../../types";
+import { useConditionFieldCatalog } from "@/components/loyalty-rules/condition-field-catalog-context";
+import { opsForCatalogField } from "@/lib/rules/condition-field-catalog";
 import { useNodeErrorLevel } from "../../errorsContext";
 import { useConditionFlowActions } from "../../actionsContext";
 import { useConditionFlowReadOnly } from "../../viewModeContext";
 
-function opsForField(field: ConditionField | null): ComparisonOp[] {
-  if (!field) return [...OPERATORS_WITH_ANY_TYPE];
-  const meta = FIELD_METADATA[field];
-  return meta ? [...OPERATORS_BY_TYPE[meta.type], ...OPERATORS_WITH_ANY_TYPE] : [...OPERATORS_WITH_ANY_TYPE];
-}
-
 export function ConditionNode({ id, data, selected }: NodeProps<ConditionNodeData>) {
+  const catalog = useConditionFieldCatalog();
+  const fieldMetadata = catalog.metadata;
   const readOnly = useConditionFlowReadOnly();
   const level = useNodeErrorLevel(id);
   const actions = useConditionFlowActions();
@@ -36,8 +34,11 @@ export function ConditionNode({ id, data, selected }: NodeProps<ConditionNodeDat
 
   const field = draft.field;
   const operator = draft.operator;
-  const meta = field ? FIELD_METADATA[field] : null;
-  const opOptions = useMemo(() => opsForField(field), [field]);
+  const meta = field ? fieldMetadata[field] : null;
+  const opOptions = useMemo(
+    () => opsForCatalogField(catalog, field).map((o) => o.value),
+    [catalog, field]
+  );
 
   const save = () => {
     actions.updateNodeData(id, { field: draft.field, operator: draft.operator, value: draft.value, negate: draft.negate });
@@ -121,21 +122,21 @@ export function ConditionNode({ id, data, selected }: NodeProps<ConditionNodeDat
                   value={field ?? ""}
                   onChange={(e) => {
                     const nextField = (e.target.value || null) as ConditionField | null;
-                    const nextOps = opsForField(nextField);
+                    const nextOps = opsForCatalogField(catalog, nextField).map((o) => o.value);
                     setDraft((d) => ({
                       ...d,
                       field: nextField,
                       operator: (nextOps[0] ?? null) as ComparisonOp | null,
-                      value: nextField && FIELD_METADATA[nextField]?.type === "number" ? 0 : "",
+                      value: nextField && fieldMetadata[nextField]?.type === "number" ? 0 : "",
                     }));
                   }}
                 >
                   <option value="" disabled>
                     Select…
                   </option>
-                  {Object.entries(FIELD_METADATA).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v.label}
+                  {catalog.fields.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
                     </option>
                   ))}
                 </select>

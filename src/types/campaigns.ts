@@ -47,6 +47,10 @@ export interface CampaignUpsertRequest {
   validUntil: string;
 }
 
+export interface CampaignEventSchemaUpsertRequest {
+  eventSchema: Record<string, unknown>;
+}
+
 export interface CampaignResponse {
   tenantId: string;
   programmeUid: string;
@@ -58,6 +62,7 @@ export interface CampaignResponse {
   status: CampaignStatus;
   targetSegment?: CampaignTargetSegment;
   triggerEventType: string;
+  eventSchema?: Record<string, unknown> | null;
   offerConfig?: CampaignOfferConfig;
   mutualExclGroup?: string;
   stackMode: StackMode;

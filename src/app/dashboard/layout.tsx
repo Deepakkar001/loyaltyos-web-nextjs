@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { ensureAuthSession, onboardingApi } from "@/lib/api/client";
+import { STATUS_TO_STEP, type OnboardingStatus } from "@/types/onboarding";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import toast from "react-hot-toast";
@@ -46,6 +47,13 @@ type NavGroup = {
   label: string;
   items: NavItem[];
 };
+
+/** Canonical integrations page (API keys, webhooks, sandbox validation). */
+const INTEGRATIONS_HREF = "/dashboard/integrate";
+
+function isOnboardingComplete(status: OnboardingStatus | null): boolean {
+  return status != null && STATUS_TO_STEP[status] === "complete";
+}
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -74,7 +82,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/dashboard/campaigns/create", label: "Create Campaign", icon: GitBranchPlus },
-      { href: "/dashboard/campaign-rules/create/campaign", label: "Create Campaign Rule", icon: GitBranchPlus },
+      { href: "/dashboard/campaign-rules/create/campaign?new=1", label: "Create Campaign Rule", icon: GitBranchPlus },
       { href: "/dashboard/campaigns/reports", label: "Campaign Reports", icon: Download },
     ],
   },
@@ -92,7 +100,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/profile", label: "Your Profile", icon: User },
       { href: "/dashboard/settings/team", label: "Team & Permissions", icon: Users },
-      { href: "/dashboard/settings/integrations", label: "Integrations", icon: Plug },
+      { href: INTEGRATIONS_HREF, label: "Integrations", icon: Plug },
       { href: "/dashboard/settings/billing", label: "Billing & Plan", icon: HandCoins },
     ],
   },
@@ -109,7 +117,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/configure", label: "Configure", icon: Settings },
       { href: "/dashboard/loyalty-rules/create/basic-info", label: "Rules Setup", icon: GitBranchPlus },
-      { href: "/dashboard/integrate", label: "Integrate", icon: Plug },
+      { href: INTEGRATIONS_HREF, label: "Integrate", icon: Plug },
       { href: "/dashboard/go-live", label: "Go Live", icon: Rocket },
     ],
   },
@@ -119,11 +127,19 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { onboardingStatus } = useOnboardingStore();
 
+  const navGroups = useMemo(
+    () =>
+      isOnboardingComplete(onboardingStatus)
+        ? NAV_GROUPS.filter((g) => g.label !== "Setup Progress")
+        : NAV_GROUPS,
+    [onboardingStatus]
+  );
+
   // Pick the single best-matching nav href (longest prefix wins) so a parent
   // and a more-specific child don't light up simultaneously.
   const bestHref = useMemo(() => {
     let winner: string | null = null;
-    for (const group of NAV_GROUPS) {
+    for (const group of navGroups) {
       for (const item of group.items) {
         if (pathname === item.href || pathname.startsWith(item.href + "/")) {
           if (!winner || item.href.length > winner.length) winner = item.href;
@@ -131,11 +147,11 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       }
     }
     return winner;
-  }, [pathname]);
+  }, [pathname, navGroups]);
 
   return (
     <nav className="px-3 py-4 space-y-6 overflow-y-auto" aria-label="Tenant sidebar navigation">
-      {NAV_GROUPS.map((group) => (
+      {navGroups.map((group) => (
         <div key={group.label}>
           <p className="px-3 pt-6 section-title">
             {group.label}
@@ -147,7 +163,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               const showDot =
                 (item.href === "/dashboard/configure" && onboardingStatus === "AGREEMENT_SIGNED") ||
                 (item.href === "/dashboard/loyalty-rules/create/basic-info" && onboardingStatus === "CONFIGURED") ||
-                (item.href === "/dashboard/integrate" && onboardingStatus === "RULES_CONFIGURED") ||
+                (item.href === INTEGRATIONS_HREF && onboardingStatus === "RULES_CONFIGURED") ||
                 (item.href === "/dashboard/go-live" && onboardingStatus === "SANDBOX_TESTING");
               return (
                 <Link

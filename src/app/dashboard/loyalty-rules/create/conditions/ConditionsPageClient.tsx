@@ -11,6 +11,8 @@ import { FieldHelp } from "@/components/ui/field-help";
 import { ConditionBuilder } from "@/components/loyalty-rules/condition-builder/ConditionBuilder";
 import { fromBackendConditionTree } from "@/components/loyalty-rules/condition-builder/fromBackend";
 import { toBackendConditionTree, type ConditionNode, type ConditionGroup, type ConditionTreeDraft } from "@/components/loyalty-rules/condition-builder/types";
+import { ConditionFieldCatalogProvider } from "@/components/loyalty-rules/condition-field-catalog-context";
+import { useConditionFieldCatalog as useLoadedConditionFieldCatalog } from "@/lib/rules/use-condition-field-catalog";
 import { RuleFlowBuilder, type RuleFlowBuilderHandle } from "@/components/loyalty-rules/condition-flow/RuleFlowBuilder";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
@@ -92,7 +94,10 @@ export default function ConditionsPageClient() {
 
   const [tree, setTree] = useState<ConditionTreeDraft>({ kind: "group", id: "root", op: "AND", nodes: [] });
   const [uiMode, setUiMode] = useState<"current" | "diagram">("current");
-  const [eventType, setEventType] = useState<string>("purchase");
+  const [programmeUid, setProgrammeUid] = useState("default");
+  const [campaignUid, setCampaignUid] = useState("");
+  const [triggerEventType, setTriggerEventType] = useState("PURCHASE");
+  const [eventType, setEventType] = useState<string>("PURCHASE");
   /**
    * False until RuleFlowBuilder confirms the diagram has at least one real
    * condition node with no blocking errors. Initialized to false so the Next
@@ -125,7 +130,10 @@ export default function ConditionsPageClient() {
     const existing = loadRuleDraft(tenantId, draftScope);
     if (!existing) return;
 
-    setEventType(existing.triggerEventType || "purchase");
+    setEventType(existing.triggerEventType || "PURCHASE");
+    setTriggerEventType(existing.triggerEventType || "PURCHASE");
+    setProgrammeUid(existing.programmeUid || "default");
+    setCampaignUid(existing.campaignUid ?? "");
     if (existing.conditionUiMode === "diagram" || existing.conditionUiMode === "current") {
       setUiMode(existing.conditionUiMode);
     }
@@ -138,7 +146,14 @@ export default function ConditionsPageClient() {
     } else {
       setTree(fromBackendConditionTree(existing.conditionTree));
     }
-  }, [tenantId, pathname, storeHydrated]);
+  }, [tenantId, pathname, storeHydrated, conditionsPath, draftScope]);
+
+  const fieldCatalog = useLoadedConditionFieldCatalog({
+    tenantId,
+    programmeUid,
+    triggerEventType,
+    campaignUid: draftScope === "campaign" ? campaignUid : undefined,
+  });
 
   // Autosave so users who jump via the step tabs (without clicking Next) do not lose work.
   useEffect(() => {
@@ -255,11 +270,34 @@ export default function ConditionsPageClient() {
     router.push(actionsPath);
   };
 
+  const conditionsBody = (
+    <>
+      {!fieldCatalog.eventDefinitionMatched && !fieldCatalog.loading ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300 rounded-xl border border-amber-200/80 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20 px-3 py-2">
+          No event definition matched <span className="font-semibold">{triggerEventType}</span> in{" "}
+          {draftScope === "campaign" ? "this campaign's event schema" : "programme config"}.
+          Add it under Setup → Event Schema
+          {draftScope === "campaign" ? " (Campaign schema tab)" : ""}, or pick a trigger that exists.
+        </p>
+      ) : null}
+      {fieldCatalog.eventDefinitionMatched && fieldCatalog.fields.length === 0 && !fieldCatalog.loading ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300 rounded-xl border border-amber-200/80 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20 px-3 py-2">
+          Event <span className="font-semibold">{triggerEventType}</span> has no payload fields defined yet.
+        </p>
+      ) : null}
+      {fieldCatalog.error ? (
+        <p className="text-xs text-red-600">{fieldCatalog.error}</p>
+      ) : null}
+    </>
+  );
+
   // ── Diagram mode — edge-to-edge, no card padding ─────────────────────────
   if (uiMode === "diagram") {
     return (
       <CreateRuleShell title="Conditions">
+        <ConditionFieldCatalogProvider catalog={fieldCatalog}>
         <div className="space-y-4">
+          {conditionsBody}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold">When These Conditions Match</p>
@@ -298,6 +336,7 @@ export default function ConditionsPageClient() {
             </Button>
           </div>
         </div>
+        </ConditionFieldCatalogProvider>
       </CreateRuleShell>
     );
   }
@@ -305,8 +344,10 @@ export default function ConditionsPageClient() {
   // ── Classic mode — original Card layout, unchanged ────────────────────────
   return (
     <CreateRuleShell title="Conditions">
+      <ConditionFieldCatalogProvider catalog={fieldCatalog}>
       <Card className="p-6 border-border/70 bg-[var(--surface-card)]">
         <div className="space-y-6">
+          {conditionsBody}
           <div>
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold">When These Conditions Match</p>
@@ -343,6 +384,7 @@ export default function ConditionsPageClient() {
           </div>
         </div>
       </Card>
+      </ConditionFieldCatalogProvider>
     </CreateRuleShell>
   );
 }

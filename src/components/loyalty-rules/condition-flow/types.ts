@@ -1,6 +1,14 @@
 import type { Edge, Node } from "reactflow";
 
 import type { ComparisonOp, ConditionField, ConditionTreeDraft, LogicalOp } from "../condition-builder/types";
+import {
+  ALL_COMPARISON_OPS,
+  CONDITION_OPERATOR_LABELS,
+  fallbackConditionFieldCatalog,
+  catalogToFieldMetadata,
+  type ConditionFieldMeta,
+  type ConditionFieldValueType,
+} from "@/lib/rules/condition-field-catalog";
 
 /**
  * Yes/no branch for edges leaving a condition node.
@@ -26,73 +34,23 @@ export function getConditionBranchLabel(e: {
   return undefined;
 }
 
-export type ConditionValueType = "number" | "string" | "datetime";
+export type { ConditionFieldMeta };
+export type ConditionValueType = ConditionFieldValueType;
 
-export type ConditionFieldMeta = {
-  type: ConditionValueType;
-  label: string;
-  placeholder?: string;
-  options?: Array<{ label: string; value: string }>;
-};
-
-export const FIELD_METADATA: Record<ConditionField, ConditionFieldMeta> = {
-  "event.amount": { type: "number", label: "Transaction Amount", placeholder: "e.g. 500" },
-  "event.eventType": {
-    type: "string",
-    label: "Event Type",
-    options: [
-      { label: "Purchase", value: "purchase" },
-      { label: "Login", value: "login" },
-      { label: "Referral", value: "referral" },
-    ],
-  },
-  "event.channel": {
-    type: "string",
-    label: "Channel",
-    options: [
-      { label: "Mobile", value: "mobile" },
-      { label: "Web", value: "web" },
-      { label: "In-Store", value: "instore" },
-    ],
-  },
-  "event.timestamp": { type: "datetime", label: "Event Time", placeholder: "YYYY-MM-DD" },
-  "event.transactionId": { type: "string", label: "Transaction ID" },
-  "event.merchantId": { type: "string", label: "Merchant ID" },
-  "event.productCategory": { type: "string", label: "Product Category" },
-  "customer.tierUid": {
-    type: "string",
-    label: "Customer Tier",
-    options: [
-      { label: "Gold", value: "gold" },
-      { label: "Silver", value: "silver" },
-      { label: "Bronze", value: "bronze" },
-    ],
-  },
-};
+export const FIELD_METADATA: Record<string, ConditionFieldMeta> = catalogToFieldMetadata(
+  fallbackConditionFieldCatalog({ programmeUid: "default", triggerEventType: "PURCHASE" })
+);
 
 export const OPERATORS_BY_TYPE: Record<ConditionValueType, ComparisonOp[]> = {
-  number: ["EQ", "NEQ", "GT", "GTE", "LT", "LTE", "BETWEEN", "IN", "NOT_IN"],
-  string: ["EQ", "NEQ", "IN", "NOT_IN", "CONTAINS", "STARTS_WITH"],
-  datetime: ["EQ", "NEQ", "GT", "GTE", "LT", "LTE", "BETWEEN"],
+  number: [...ALL_COMPARISON_OPS],
+  string: [...ALL_COMPARISON_OPS],
+  enum: [...ALL_COMPARISON_OPS],
+  datetime: [...ALL_COMPARISON_OPS],
 };
 
-export const OPERATORS_WITH_ANY_TYPE: ComparisonOp[] = ["IS_NULL", "IS_NOT_NULL"];
+export const OPERATORS_WITH_ANY_TYPE: ComparisonOp[] = [];
 
-export const OPERATOR_LABELS: Record<ComparisonOp, string> = {
-  EQ: "equals",
-  NEQ: "does not equal",
-  GT: "is greater than",
-  GTE: "is greater than or equal to",
-  LT: "is less than",
-  LTE: "is less than or equal to",
-  IN: "is one of",
-  NOT_IN: "is not one of",
-  BETWEEN: "is between",
-  IS_NULL: "is empty",
-  IS_NOT_NULL: "is not empty",
-  CONTAINS: "contains",
-  STARTS_WITH: "starts with",
-};
+export const OPERATOR_LABELS: Record<ComparisonOp, string> = CONDITION_OPERATOR_LABELS;
 
 export type ValidationSeverity = "error" | "warning";
 

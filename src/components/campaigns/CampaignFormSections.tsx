@@ -1,21 +1,20 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
-import { ChipInput } from "@/components/campaigns/ChipInput";
 import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
 import {
   CAMPAIGN_APPROVAL_BUDGET_THRESHOLD,
   CAMPAIGN_FIELD_PLACEHOLDERS as P,
 } from "@/lib/campaigns/campaign-form";
-import {
-  formatTriggerEventTypes,
-  parseTriggerEventTypes,
-} from "@/lib/campaigns/trigger-event-types";
+import { useProgrammeDropdown } from "@/lib/programme/use-programme-dropdown";
+import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { Card } from "@/components/ui/card";
+import { FieldHelp } from "@/components/ui/field-help";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 
 function SectionCard({
@@ -57,10 +56,61 @@ function BudgetApprovalBanner({ budgetTotal }: { budgetTotal: string }) {
 }
 
 export function CampaignBasicInfoSection() {
-  const { form, patch } = useCampaignForm();
+  const { mode, form, patch } = useCampaignForm();
+  const tenantId = useOnboardingStore((s) => s.tenantId);
+  const isEdit = mode === "edit";
+  const { selectOptions, loading: programmesLoading } = useProgrammeDropdown(
+    tenantId,
+    form.programmeUid
+  );
+
+  useEffect(() => {
+    if (isEdit || programmesLoading || selectOptions.length === 0) return;
+    if (form.programmeUid.trim()) return;
+    if (selectOptions.length === 1) {
+      patch({ programmeUid: selectOptions[0].value });
+    }
+  }, [isEdit, programmesLoading, selectOptions, form.programmeUid, patch]);
+
+  const programmeOptions = useMemo(() => {
+    if (isEdit) return selectOptions;
+    if (form.programmeUid.trim()) return selectOptions;
+    return [
+      {
+        value: "",
+        label: programmesLoading ? "Loading programmes…" : "Select programme…",
+      },
+      ...selectOptions,
+    ];
+  }, [isEdit, selectOptions, form.programmeUid, programmesLoading]);
 
   return (
     <SectionCard title="Basic Info">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="campaign-programme">Programme</Label>
+          <FieldHelp text="Campaigns belong to one programme. Pick the same programmeUid your loyalty events send. This cannot be changed after the campaign is created." />
+        </div>
+        <NativeSelect
+          id="campaign-programme"
+          name="programmeUid"
+          ariaLabel="Programme"
+          value={form.programmeUid}
+          disabled={isEdit || programmesLoading}
+          onChange={(next) => patch({ programmeUid: next })}
+          options={programmeOptions}
+        />
+        {isEdit ? (
+          <p className="text-xs text-muted-foreground">
+            Programme is fixed for this campaign.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Programmes are loaded from your tenant configuration.
+          </p>
+        )}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="campaign-name">Campaign name</Label>
         <Input
@@ -110,17 +160,6 @@ export function CampaignBasicInfoSection() {
           <p className="text-xs text-muted-foreground">{P.validUntilHint}</p>
         </div>
       </div>
-
-      <ChipInput
-        label="Event types"
-        placeholder={P.eventType}
-        values={parseTriggerEventTypes(form.triggerEventType)}
-        onChange={(values) => patch({ triggerEventType: formatTriggerEventTypes(values) })}
-        normalize={(s) => s.trim().toUpperCase()}
-      />
-      <p className="text-xs text-muted-foreground">
-        Add every event type this campaign should respond to (e.g. PURCHASE, ORDER_PLACED).
-      </p>
     </SectionCard>
   );
 }

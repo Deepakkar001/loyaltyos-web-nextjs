@@ -166,29 +166,20 @@ export function extractEventTypesFromProgrammeConfig(
   configRoot: unknown,
   preserveExact: readonly string[] = []
 ): string[] {
-  const root = safeRecord(configRoot);
-  const eventSchema = safeRecord(root.eventSchema);
+  const draft = eventSchemaDraftFromConfigRoot(configRoot);
   const out: string[] = [];
   const seen = new Set<string>();
   const push = (t: string) => {
     const s = t.trim();
-    if (!s || seen.has(s)) return;
-    seen.add(s);
+    if (!s) return;
+    const key = s.toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
     out.push(s);
   };
 
-  const eds = safeArr(eventSchema.eventDefinitions);
-  for (const raw of eds) {
-    const o = safeRecord(raw);
-    const eventType = String(o.eventType ?? "").trim();
-    if (eventType) push(eventType);
-  }
-
-  if (out.length === 0) {
-    const std = safeArr(eventSchema.standardFields);
-    if (std.length > 0) {
-      push("PURCHASE");
-    }
+  for (const def of draft.eventDefinitions) {
+    push(def.eventType);
   }
 
   for (const p of preserveExact) {
@@ -243,4 +234,68 @@ export function mergeEventSchemaIntoProgrammeConfig(
 export function isLikelyCompleteProgrammeConfig(configRoot: unknown): boolean {
   const root = safeRecord(configRoot);
   return Boolean(safeRecord(root.programmeIdentity).programmeName);
+}
+
+/** Parse campaign `eventSchema` JSON (same shape as programme `config.eventSchema`). */
+export function eventSchemaDraftFromEventSchemaNode(eventSchema: unknown): EventSchemaDraft {
+  return eventSchemaDraftFromConfigRoot({ eventSchema });
+}
+
+/** True when the node has at least one `eventDefinitions` entry. */
+export function hasPopulatedEventSchema(eventSchema: unknown): boolean {
+  if (!eventSchema || typeof eventSchema !== "object" || Array.isArray(eventSchema)) return false;
+  return eventSchemaDraftFromEventSchemaNode(eventSchema).eventDefinitions.length > 0;
+}
+
+/**
+ * Build editable campaign schema from stored JSON, legacy trigger list, and optional programme template.
+ */
+export function eventSchemaDraftFromCampaign(args: {
+  eventSchema?: unknown;
+  triggerEventType?: string;
+  programmeConfigRoot?: unknown;
+}): EventSchemaDraft {
+  const es = args.eventSchema;
+  if (es && typeof es === "object" && !Array.isArray(es)) {
+    const draft = eventSchemaDraftFromEventSchemaNode(es);
+    if (draft.eventDefinitions.length > 0) {
+      return draft;
+    }
+  }
+
+  const programmeDraft = args.programmeConfigRoot
+    ? eventSchemaDraftFromConfigRoot(args.programmeConfigRoot)
+    : defaultEventSchemaDraft();
+
+  const types = (args.triggerEventType ?? "")
+    .split(/[,;]/)
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean);
+  const uniqueTypes = Array.from(new Set(types));
+
+  if (uniqueTypes.length === 0) {
+    return {
+      version: 1,
+      backwardCompatibilityDays: 30,
+      eventDefinitions: [],
+      customFields: [],
+    };
+  }
+
+  const eventDefinitions: EventSchemaDefinitionDraft[] = uniqueTypes.map((eventType) => {
+    const progDef = programmeDraft.eventDefinitions.find(
+      (d) => d.eventType.trim().toUpperCase() === eventType
+    );
+    const coreFields = progDef
+      ? progDef.coreFields.map((f) => ({ ...f }))
+      : [{ name: "", type: "string" as EventSchemaFieldType, required: false }];
+    return { eventType, coreFields };
+  });
+
+  return {
+    version: 1,
+    backwardCompatibilityDays: programmeDraft.backwardCompatibilityDays,
+    eventDefinitions,
+    customFields: [],
+  };
 }

@@ -16,10 +16,14 @@ export type RuleDraftStep = (typeof LEGACY_STEPS)[number];
 
 export type RuleType = "PROGRAMME" | "CAMPAIGN";
 
+export type RuleDraftIntent = "create" | "edit";
+
 export type RuleDraft = {
   ruleType: RuleType;
   programmeUid: string;
   ruleUid?: string;
+  /** When "edit", publish updates the existing rule instead of creating a new one. */
+  draftIntent?: RuleDraftIntent;
 
   /** Set for CAMPAIGN rules. */
   campaignUid?: string;
@@ -130,4 +134,10 @@ export function mergeRuleDraft(
   const merged = { ...base, ...partial };
   saveRuleDraftFields(tenantId, merged, scope);
   return merged;
+}
+
+export function isEditingExistingRuleDraft(
+  draft: RuleDraftFields | null | undefined
+): boolean {
+  return draft?.draftIntent === "edit" && Boolean(draft.ruleUid?.trim());
 }
