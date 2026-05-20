@@ -1,4 +1,7 @@
 import { AnimatedSection } from "./animated-section";
+import { ComparisonPaths } from "./comparison-paths";
+import { HeroLoyaltyFlow } from "./hero-loyalty-flow";
+import { HeroMetricsStrip } from "./hero-metrics-strip";
 
 const pains = [
   {
@@ -35,24 +38,6 @@ const solves = [
   {
     title: "Capacity you can budget",
     body: "Packaged onboarding hours plus clear overage mechanics so procurement sees the full footprint.",
-  },
-] as const;
-
-const comparisons = [
-  {
-    lane: "Typical storefront plugin",
-    pain: "Fast for narrow stacks; breaks when franchises, custom POS, or multi-brand logic appear.",
-    us: "LoyaltyOS is built around your owned channels and transactional reality—not a single monolith SKU list.",
-  },
-  {
-    lane: "Legacy enterprise rollout",
-    pain: "Multi-quarter deployments, heavyweight change boards, brittle custom code paths.",
-    us: "A modern SaaS core with repeatable onboarding so you steer scope instead of restarting annually.",
-  },
-  {
-    lane: "In-house-only build",
-    pain: "High talent cost and opportunity cost while product priorities compete for the same squad.",
-    us: "Offload boilerplate loyalty infrastructure; keep differentiated experiences in your product layer.",
   },
 ] as const;
 
@@ -99,27 +84,12 @@ export function SectionDifferentiation() {
           </div>
         </div>
 
-        <div className="mt-12">
-          <h3 className="text-center text-lg font-semibold text-slate-900">Compared with common paths</h3>
-          <p className="mt-2 text-center text-sm text-slate-500 max-w-2xl mx-auto">
-            Illustrative lanes—not a dated feature matrix claiming live parity with named vendors on every knob.
-          </p>
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            {comparisons.map((row) => (
-              <div
-                key={row.lane}
-                className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-hover)]"
-              >
-                <p className="text-sm font-bold text-brand-700">{row.lane}</p>
-                <p className="mt-4 text-sm text-slate-600 leading-relaxed flex-1">{row.pain}</p>
-                <div className="mt-6 border-t border-slate-100 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600">LoyaltyOS angle</p>
-                  <p className="mt-2 text-sm text-slate-800 leading-relaxed">{row.us}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="mt-12 overflow-hidden rounded-2xl bg-brand-950 px-6 py-10 shadow-[var(--shadow-raised)] md:px-10 md:py-12">
+          <HeroLoyaltyFlow />
+          <HeroMetricsStrip />
         </div>
+
+        <ComparisonPaths />
       </div>
     </AnimatedSection>
   );

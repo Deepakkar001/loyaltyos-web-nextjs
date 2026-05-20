@@ -205,3 +205,53 @@
   text-transform: uppercase;
   opacity: 0.6;
 }
+
+/* Hero — professional motion accents */
+@keyframes hero-text-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+@keyframes hero-border-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.hero-text-shimmer {
+  background-size: 200% auto;
+  animation: hero-text-shimmer 7s ease-in-out infinite;
+}
+
+.hero-shimmer-border {
+  position: relative;
+  border-radius: 1rem;
+  padding: 1px;
+  overflow: hidden;
+}
+
+.hero-shimmer-border::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 260deg,
+    rgba(129, 149, 248, 0.55) 280deg,
+    rgba(200, 214, 254, 0.9) 300deg,
+    rgba(129, 149, 248, 0.55) 320deg,
+    transparent 340deg
+  );
+  animation: hero-border-spin 5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-text-shimmer,
+  .hero-shimmer-border::before {
+    animation: none;
+  }
+}
