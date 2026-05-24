@@ -49,7 +49,7 @@ type NavGroup = {
 };
 
 /** Canonical integrations page (API keys, webhooks, sandbox validation). */
-const INTEGRATIONS_HREF = "/dashboard/integrate";
+const INTEGRATIONS_HREF = "/dashboard/integration";
 
 function isOnboardingComplete(status: OnboardingStatus | null): boolean {
   return status != null && STATUS_TO_STEP[status] === "complete";
