@@ -41,7 +41,7 @@ export type RuleDraft = {
   conditionTree: unknown;
   actions: Array<{
     actionUid?: string;
-    actionType: "AWARD_POINTS";
+    actionType: "AWARD_POINTS" | "ISSUE_VOUCHER";
     formula: string;
     config?: unknown;
   }>;

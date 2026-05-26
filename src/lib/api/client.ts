@@ -51,10 +51,28 @@ const apiClient = axios.create({
 
 let refreshPromise: Promise<LoginResponse> | null = null;
 
+/** Thrown when refresh cookie is missing or expired (expected on /login or after logout). */
+export class AuthSessionRequiredError extends Error {
+  constructor() {
+    super("Authentication required");
+    this.name = "AuthSessionRequiredError";
+  }
+}
+
 async function refreshSingleFlight(): Promise<LoginResponse> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
-    const res = await apiClient.post<LoginResponse>("/api/v1/auth/refresh", {});
+    const res = await apiClient.post<LoginResponse>(
+      "/api/v1/auth/refresh",
+      {},
+      {
+        // 401 is normal when not logged in — avoid treating it as an axios transport error.
+        validateStatus: (status) => status === 200 || status === 401,
+      }
+    );
+    if (res.status === 401) {
+      throw new AuthSessionRequiredError();
+    }
     return res.data;
   })();
   try {
@@ -419,22 +437,6 @@ export const integrationApi = {
   getCredentialSummaries: async () => {
     try {
       const res = await apiClient.get("/api/v1/me/integration/credentials");
-      return res.data;
-    } catch (err) {
-      handleError(err as AxiosError<ApiErrorResponse>);
-    }
-  },
-  verifyWebhook: async () => {
-    try {
-      const res = await apiClient.post("/api/v1/me/integration/webhook/verify", {});
-      return res.data;
-    } catch (err) {
-      handleError(err as AxiosError<ApiErrorResponse>);
-    }
-  },
-  getWebhookStatus: async () => {
-    try {
-      const res = await apiClient.get("/api/v1/me/integration/webhook/status");
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);

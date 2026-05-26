@@ -22,7 +22,6 @@ import {
   Star,
   User,
   Users,
-  Webhook,
   BookOpenText,
   Megaphone,
   LogOut,
@@ -48,7 +47,7 @@ type NavGroup = {
   items: NavItem[];
 };
 
-/** Canonical integrations page (API keys, webhooks, sandbox validation). */
+/** Canonical integrations page (API keys, sandbox validation). */
 const INTEGRATIONS_HREF = "/dashboard/integration";
 
 function isOnboardingComplete(status: OnboardingStatus | null): boolean {
@@ -66,7 +65,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/configure", label: "Configure Programme", icon: Settings },
       { href: "/dashboard/configure/my-configurations", label: "My Configurations", icon: Search },
       { href: "/dashboard/setup/event-schema", label: "Event Schema", icon: DatabaseZap },
-      { href: "/dashboard/setup/webhooks", label: "Webhook Config", icon: Webhook },
       { href: "/dashboard/setup/rewards-catalog", label: "Rewards Catalog", icon: Star },
     ],
   },

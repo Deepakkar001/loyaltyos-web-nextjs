@@ -96,9 +96,16 @@ export function resolveCatalogFieldType(
 }
 
 export function opsForFieldType(
-  _t?: ConditionFieldValueType
+  fieldType?: ConditionFieldValueType
 ): Array<{ value: ComparisonOp; label: string }> {
-  return CONDITION_OPERATOR_OPTIONS;
+  switch (fieldType) {
+    case "number":
+    case "string":
+    case "enum":
+    case "datetime":
+    default:
+      return CONDITION_OPERATOR_OPTIONS;
+  }
 }
 
 export function opsForCatalogField(

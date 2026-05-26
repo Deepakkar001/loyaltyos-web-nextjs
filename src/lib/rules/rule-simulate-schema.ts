@@ -110,7 +110,8 @@ export function listEventTypesFromDraft(draft: EventSchemaDraft): string[] {
 export function defaultSandboxInputForField(f: SandboxFormField): string {
   if (f.name === "transactionId") return `txn_${Date.now()}`;
   if (f.name === "amount") return "500";
-  if (f.name === "customerId") return "cust_123";
+  if (f.name === "customerId" || f.name === "CustomerId") return "cust_123";
+  if (f.name === "channel" || f.name === "Channel") return "MOBILE_APP";
   if (f.widget === "boolean") return "false";
   if (f.widget === "number" || f.widget === "integer") return "0";
   if (f.widget === "object") return "{}";

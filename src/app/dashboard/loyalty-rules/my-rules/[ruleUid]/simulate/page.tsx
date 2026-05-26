@@ -46,6 +46,16 @@ type RuleEval = {
   matchedRules?: Array<{ ruleUid?: string; ruleName?: string; pointsFromThisRule?: number }>;
   suppressedRules?: Array<{ ruleUid?: string; reason?: string }>;
   rewardCommands?: Array<{ actionType?: string; pointsToAward?: number; sourceRuleUid?: string; idempotencyKey?: string }>;
+  catalogGrants?: Array<{
+    sourceRuleUid?: string;
+    ruleName?: string;
+    catalogRewardUid?: string;
+    catalogRewardName?: string;
+    catalogRewardType?: string;
+    catalogPointsCost?: number;
+    valid?: boolean;
+    errorMessage?: string;
+  }>;
   evaluationTrace?: unknown;
 };
 
@@ -222,10 +232,12 @@ export default function RuleSimulatePage() {
       } else if (didMatch && !tenantId) {
         toast("Rule matched. Sign in to record the sandbox pass for activation.");
       } else if (!didMatch) {
-        toast(
-          "No match for this rule. Set event type / amounts / channels to the same values your conditions use (case-sensitive).",
-          { duration: 5000 }
-        );
+        const hint =
+          res.ruleEvaluationError ??
+          (ruleEval?.message === "No match"
+            ? "Rule evaluated but conditions did not match. Use the exact field names and values from your rule (e.g. event.Channel vs event.channel — case-sensitive)."
+            : "No match for this rule. Fill CustomerId / Channel / event type to match your conditions (case-sensitive), then check Test Results → Raw response.");
+        toast(hint, { duration: 6000 });
       } else {
         toast("Sandbox test completed.");
       }
@@ -487,6 +499,12 @@ export default function RuleSimulatePage() {
                     </div>
                     <div>Matched rules: {result.ruleEvaluation.matchedRules?.length ?? 0}</div>
                     <div>Suppressed rules: {result.ruleEvaluation.suppressedRules?.length ?? 0}</div>
+                    <div>
+                      Catalog grants:{" "}
+                      <span className="text-foreground font-semibold">
+                        {result.ruleEvaluation.catalogGrants?.length ?? 0}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="pt-2">
@@ -508,7 +526,48 @@ export default function RuleSimulatePage() {
                   </div>
 
                   <div className="pt-2">
-                    <p className="text-sm font-semibold">Reward commands</p>
+                    <p className="text-sm font-semibold">Catalog grants (vouchers)</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Issued when the rule matches — not a points ledger debit.{" "}
+                      <span className="font-medium">Redemption cost</span> is what the member spends later to redeem.
+                    </p>
+                    {result.ruleEvaluation.catalogGrants?.length ? (
+                      <div className="mt-2 space-y-2">
+                        {result.ruleEvaluation.catalogGrants.map((g, idx) => (
+                          <div
+                            key={idx}
+                            className={`rounded-xl border p-3 text-sm ${
+                              g.valid === false
+                                ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40"
+                                : "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30"
+                            }`}
+                          >
+                            <div className="font-medium">
+                              {g.catalogRewardName ?? g.catalogRewardUid ?? "Catalog reward"}
+                              {g.valid === false ? " (invalid)" : ""}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                              <div>
+                                rewardUid: {g.catalogRewardUid ?? "-"} · type: {g.catalogRewardType ?? "-"}
+                              </div>
+                              {g.catalogPointsCost != null ? (
+                                <div>Redemption cost: {g.catalogPointsCost} points</div>
+                              ) : null}
+                              <div>
+                                from rule: {g.ruleName ?? g.sourceRuleUid ?? "-"}
+                              </div>
+                              {g.errorMessage ? <div className="text-red-700 dark:text-red-300">{g.errorMessage}</div> : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-1">No catalog grants for matched rules.</p>
+                    )}
+                  </div>
+
+                  <div className="pt-2">
+                    <p className="text-sm font-semibold">Reward commands (points)</p>
                     {result.ruleEvaluation.rewardCommands?.length ? (
                       <div className="mt-2 space-y-2">
                         {result.ruleEvaluation.rewardCommands.map((c, idx) => (

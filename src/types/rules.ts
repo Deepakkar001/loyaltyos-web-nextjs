@@ -3,7 +3,7 @@ export type ExecutionMode = "FIRST_MATCH" | "ALL_MATCHING";
 
 export type RuleActionUpsertItem = {
   actionUid?: string;
-  actionType: "AWARD_POINTS";
+  actionType: "AWARD_POINTS" | "ISSUE_VOUCHER";
   formula: string;
   config?: unknown;
 };
