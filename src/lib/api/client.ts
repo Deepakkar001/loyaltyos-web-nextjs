@@ -40,7 +40,7 @@ import { readMetadataCache, writeMetadataCache } from "@/lib/api/metadata-cache"
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
-const apiClient = axios.create({
+export const apiClient = axios.create({
   baseURL: getApiBaseUrl(),
   timeout: 15000,
   withCredentials: true, // required for HttpOnly refresh cookie
