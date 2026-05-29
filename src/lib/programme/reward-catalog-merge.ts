@@ -39,6 +39,66 @@ export function defaultRewardCatalogDraft(): RewardCatalogDraft {
   };
 }
 
+/** Reassigns displayOrder 0..n-1 to match list order (after drag-and-drop or delete). */
+export function reindexCatalogItemDisplayOrder(items: RewardCatalogItemDraft[]): RewardCatalogItemDraft[] {
+  return items.map((item, idx) => ({ ...item, displayOrder: idx }));
+}
+
+export function sortCatalogItemsByDisplayOrder(items: RewardCatalogItemDraft[]): RewardCatalogItemDraft[] {
+  return [...items].sort((a, b) => a.displayOrder - b.displayOrder || a.rewardUid.localeCompare(b.rewardUid));
+}
+
+const REWARD_UID_MAX_LEN = 64;
+
+/** Generates a unique catalog reward UID (same pattern as “Add reward” in the admin UI). */
+export function newCatalogRewardUid(existingUids: Iterable<string> = []): string {
+  const taken = new Set(Array.from(existingUids, (u) => u.trim()).filter(Boolean));
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const uid =
+      attempt === 0
+        ? `reward_${Date.now().toString(36)}`
+        : `reward_${Date.now().toString(36)}_${attempt}`;
+    const trimmed = uid.slice(0, REWARD_UID_MAX_LEN);
+    if (!taken.has(trimmed)) return trimmed;
+  }
+  const fallback = `reward_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  return fallback.slice(0, REWARD_UID_MAX_LEN);
+}
+
+/** Deep-clones a catalog item; metadata JSON is re-serialized so edits on the copy stay isolated. */
+export function cloneCatalogItemDraft(source: RewardCatalogItemDraft): RewardCatalogItemDraft {
+  let metadataJson = "{}";
+  try {
+    const parsed = JSON.parse(source.metadataJson || "{}");
+    metadataJson = JSON.stringify(parsed, null, 2);
+  } catch {
+    metadataJson = source.metadataJson || "{}";
+  }
+  return {
+    rewardUid: source.rewardUid,
+    name: source.name,
+    rewardType: source.rewardType,
+    status: source.status,
+    pointsCost: source.pointsCost,
+    displayOrder: source.displayOrder,
+    description: source.description,
+    metadataJson,
+  };
+}
+
+/** Builds a DRAFT duplicate inserted below the source item in catalogue order. */
+export function buildDuplicateCatalogItem(
+  source: RewardCatalogItemDraft,
+  existingUids: Iterable<string>
+): RewardCatalogItemDraft {
+  const copy = cloneCatalogItemDraft(source);
+  copy.rewardUid = newCatalogRewardUid(existingUids);
+  const baseName = source.name.trim();
+  copy.name = baseName ? `${baseName} (copy)` : "New reward (copy)";
+  copy.status = "DRAFT";
+  return copy;
+}
+
 function asObject(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
@@ -93,7 +153,7 @@ export function rewardCatalogDraftFromConfigRoot(configRoot: unknown): RewardCat
   return {
     version: typeof catalog.version === "number" ? catalog.version : 1,
     rewardTypes: rewardTypes.length ? rewardTypes : DEFAULT_REWARD_TYPES.map((t) => ({ ...t })),
-    items,
+    items: sortCatalogItemsByDisplayOrder(items),
   };
 }
 
