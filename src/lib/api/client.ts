@@ -7,6 +7,7 @@ import {
   ProgrammeConfigRequest,
   CreateProgrammeRequest,
   ProgrammeSummaryResponse,
+  ProgrammeStatusPatchRequest,
   ProgrammeConfigBlobResponse,
   UpsertProgrammeConfigRequest,
   RegisterTenantRequest,
@@ -37,6 +38,16 @@ import type {
 } from "@/types/analytics";
 import { getApiBaseUrl } from "@/lib/api/get-api-base-url";
 import { readMetadataCache, writeMetadataCache } from "@/lib/api/metadata-cache";
+import type {
+  VoucherBatchDetail,
+  VoucherBatchListItem,
+  VoucherBatchUploadResponse,
+  VoucherStockResponse,
+  VoucherUploadSpecResponse,
+  DenominationMappingItem,
+  DenominationMappingsResponse,
+  VoucherStockBreakdownResponse,
+} from "@/types/voucher";
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
@@ -141,9 +152,38 @@ export class ApiError extends Error {
   }
 }
 
+/** Reads message from standard ErrorResponse or voucher upload error bodies. */
+function messageFromResponseData(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const record = data as Record<string, unknown>;
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message;
+  }
+  if (typeof record.errorMessage === "string" && record.errorMessage.trim()) {
+    return record.errorMessage;
+  }
+  return undefined;
+}
+
 function handleError(err: AxiosError<ApiErrorResponse>): never {
-  if (err.response?.data) {
-    throw new ApiError(err.response.data);
+  const data = err.response?.data;
+  const parsedMessage = messageFromResponseData(data);
+  if (data && typeof data === "object" && parsedMessage) {
+    const record = data as unknown as Record<string, unknown>;
+    throw new ApiError({
+      timestamp: typeof record.timestamp === "string" ? record.timestamp : new Date().toISOString(),
+      status: err.response?.status ?? 400,
+      error: typeof record.error === "string" ? record.error : "REQUEST_FAILED",
+      message: parsedMessage,
+      path: typeof record.path === "string" ? record.path : "",
+      fieldErrors:
+        record.fieldErrors && typeof record.fieldErrors === "object"
+          ? (record.fieldErrors as Record<string, string>)
+          : undefined,
+    });
+  }
+  if (data && typeof data === "object" && "message" in data) {
+    throw new ApiError(data as ApiErrorResponse);
   }
   if (err.code === "ECONNABORTED") {
     throw new ApiError({
@@ -389,6 +429,20 @@ export const programmeApiV2 = {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
+  renameProgramme: async (
+    programmeUid: string,
+    data: CreateProgrammeRequest
+  ): Promise<ProgrammeSummaryResponse> => {
+    try {
+      const res = await apiClient.patch<ProgrammeSummaryResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}`,
+        data
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
   getProgrammeConfig: async (programmeUid: string): Promise<ProgrammeConfigBlobResponse> => {
     try {
       const res = await apiClient.get<ProgrammeConfigBlobResponse>(`/api/v2/programmes/${programmeUid}/config`);
@@ -407,6 +461,27 @@ export const programmeApiV2 = {
         data
       );
       return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  patchProgrammeStatus: async (
+    programmeUid: string,
+    data: ProgrammeStatusPatchRequest
+  ): Promise<ProgrammeSummaryResponse> => {
+    try {
+      const res = await apiClient.patch<ProgrammeSummaryResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/status`,
+        data
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  archiveProgramme: async (programmeUid: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/api/v2/programmes/${encodeURIComponent(programmeUid)}`);
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
@@ -796,6 +871,125 @@ export const analyticsApi = {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+export const voucherApi = {
+  getUploadSpec: async (): Promise<VoucherUploadSpecResponse> => {
+    try {
+      const res = await apiClient.get<VoucherUploadSpecResponse>("/api/v1/me/vouchers/upload-spec");
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  uploadBatch: async (
+    programmeUid: string,
+    catalogRewardUid: string,
+    file: File,
+    partnerUid?: string
+  ): Promise<VoucherBatchUploadResponse> => {
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("programmeUid", programmeUid);
+      form.append("catalogRewardUid", catalogRewardUid);
+      if (partnerUid?.trim()) {
+        form.append("partnerUid", partnerUid.trim());
+      }
+      const res = await apiClient.post<VoucherBatchUploadResponse>(
+        "/api/v1/me/vouchers/batches/upload",
+        form,
+        { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 }
+      );
+      const body = res.data;
+      if (body?.status === "ERROR" && body.errorMessage) {
+        throw new ApiError({
+          timestamp: new Date().toISOString(),
+          status: res.status,
+          error: "UPLOAD_FAILED",
+          message: body.errorMessage,
+          path: "/api/v1/me/vouchers/batches/upload",
+        });
+      }
+      return body;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  listBatches: async (): Promise<VoucherBatchListItem[]> => {
+    try {
+      const res = await apiClient.get<VoucherBatchListItem[]>("/api/v1/me/vouchers/batches");
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getBatch: async (batchUid: string): Promise<VoucherBatchDetail> => {
+    try {
+      const res = await apiClient.get<VoucherBatchDetail>(`/api/v1/me/vouchers/batches/${encodeURIComponent(batchUid)}`);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getStockBreakdown: async (
+    catalogRewardUid: string,
+    programmeUid: string
+  ): Promise<VoucherStockBreakdownResponse> => {
+    try {
+      const res = await apiClient.get<VoucherStockBreakdownResponse>(
+        `/api/v1/me/vouchers/denominations/${encodeURIComponent(catalogRewardUid)}/stock`,
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getStock: async (catalogRewardUid: string, programmeUid: string): Promise<VoucherStockResponse> => {
+    try {
+      const res = await apiClient.get<VoucherStockResponse>(
+        `/api/v1/me/vouchers/stock/${encodeURIComponent(catalogRewardUid)}`,
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+export const voucherDenominationApi = {
+  getMappings: async (
+    catalogRewardUid: string,
+    programmeUid: string
+  ): Promise<DenominationMappingsResponse> => {
+    try {
+      const res = await apiClient.get<DenominationMappingsResponse>(
+        `/api/v1/me/vouchers/denominations/${encodeURIComponent(catalogRewardUid)}`,
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  saveMappings: async (
+    catalogRewardUid: string,
+    programmeUid: string,
+    mappings: DenominationMappingItem[]
+  ): Promise<DenominationMappingsResponse> => {
+    try {
+      const res = await apiClient.put<DenominationMappingsResponse>(
+        "/api/v1/me/vouchers/denominations",
+        { catalogRewardUid, mappings },
+        { params: { programmeUid } }
+      );
+      return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);
     }

@@ -10,18 +10,22 @@ export function PillToggle({
   onPressedChange,
   srLabel,
   size = "md",
+  disabled = false,
 }: {
   pressed: boolean;
   onPressedChange: (next: boolean) => void;
   srLabel: string;
   size?: "sm" | "md";
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => onPressedChange(!pressed)}
       aria-pressed={pressed}
       className={cn(
+        disabled && "cursor-not-allowed opacity-50",
         "relative inline-flex shrink-0 items-center rounded-full border transition-colors",
         size === "sm" ? "h-7 w-[44px]" : "h-8 w-[52px]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",

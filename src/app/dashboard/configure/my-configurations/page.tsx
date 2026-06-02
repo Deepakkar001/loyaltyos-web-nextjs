@@ -3,14 +3,15 @@
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Settings, RefreshCw, Search } from "lucide-react";
+import { Plus, Settings, RefreshCw, Search, Trash2, Pencil } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PillToggle } from "@/components/ui/pill-toggle";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { programmeApiV2, ApiError, ensureAuthSession } from "@/lib/api/client";
-import type { ProgrammeSummaryResponse } from "@/types/onboarding";
+import type { ProgrammeOperationalStatus, ProgrammeSummaryResponse } from "@/types/onboarding";
 
 type RowState = ProgrammeSummaryResponse & { hasConfig: boolean | null };
 
@@ -22,6 +23,12 @@ export default function MyConfigurationsPage() {
   const [creating, setCreating] = useState(false);
   const [newProgrammeDialogOpen, setNewProgrammeDialogOpen] = useState(false);
   const [newProgrammeNameDraft, setNewProgrammeNameDraft] = useState("");
+  const [removeTarget, setRemoveTarget] = useState<RowState | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<RowState | null>(null);
+  const [renameNameDraft, setRenameNameDraft] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [statusUpdatingUid, setStatusUpdatingUid] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -115,6 +122,114 @@ export default function MyConfigurationsPage() {
     }
   }, [newProgrammeNameDraft]);
 
+  const formatArchiveError = useCallback((err: unknown) => {
+    if (err instanceof ApiError) {
+      const details = err.fieldErrors ? Object.values(err.fieldErrors).filter(Boolean) : [];
+      if (details.length > 0) {
+        return details.join(" ");
+      }
+      return err.message;
+    }
+    return "Could not remove programme";
+  }, []);
+
+  const confirmRemoveProgramme = useCallback(async () => {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await ensureAuthSession();
+      await programmeApiV2.archiveProgramme(removeTarget.programmeUid);
+      setRows((prev) => prev.filter((r) => r.programmeUid !== removeTarget.programmeUid));
+      toast.success(`"${removeTarget.name}" removed from your configuration list.`);
+      setRemoveTarget(null);
+    } catch (err) {
+      toast.error(formatArchiveError(err));
+    } finally {
+      setRemoving(false);
+    }
+  }, [removeTarget, formatArchiveError]);
+
+  const openRenameDialog = useCallback((row: RowState) => {
+    setRenameTarget(row);
+    setRenameNameDraft(row.name);
+  }, []);
+
+  const confirmRenameProgramme = useCallback(async () => {
+    if (!renameTarget) return;
+    const trimmed = renameNameDraft.trim();
+    if (trimmed.length < 2) {
+      toast.error("Enter a programme name (at least 2 characters).");
+      return;
+    }
+    if (trimmed === renameTarget.name) {
+      setRenameTarget(null);
+      return;
+    }
+    setRenaming(true);
+    try {
+      await ensureAuthSession();
+      const updated = await programmeApiV2.renameProgramme(renameTarget.programmeUid, { name: trimmed });
+      setRows((prev) =>
+        prev.map((r) =>
+          r.programmeUid === renameTarget.programmeUid
+            ? {
+                ...r,
+                name: updated.name,
+                activeConfigVersion: updated.activeConfigVersion,
+                hasConfig: updated.activeConfigVersion > 0 ? true : r.hasConfig,
+              }
+            : r
+        )
+      );
+      toast.success("Programme name updated.");
+      setRenameTarget(null);
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Could not rename programme");
+    } finally {
+      setRenaming(false);
+    }
+  }, [renameTarget, renameNameDraft]);
+
+  const setProgrammeIntegrationActive = useCallback(
+    async (row: RowState, active: boolean) => {
+      const nextStatus = active ? "ACTIVE" : "DRAFT";
+      if ((row.status || "DRAFT") === nextStatus) return;
+      if (active && row.hasConfig !== true) {
+        toast.error("Save programme configuration before activating integration for this programme.");
+        return;
+      }
+      setStatusUpdatingUid(row.programmeUid);
+      try {
+        await ensureAuthSession();
+        const updated = await programmeApiV2.patchProgrammeStatus(row.programmeUid, { status: nextStatus });
+        setRows((prev) =>
+          prev.map((r) =>
+            r.programmeUid === row.programmeUid
+              ? {
+                  ...r,
+                  status: updated.status,
+                  activeConfigVersion: updated.activeConfigVersion,
+                  hasConfig: updated.activeConfigVersion > 0 ? true : r.hasConfig,
+                }
+              : r
+          )
+        );
+        toast.success(
+          active
+            ? `"${row.name}" is active for integration.`
+            : `"${row.name}" is inactive — integration requests for this programme UID will be rejected.`
+        );
+      } catch (err) {
+        if (err instanceof ApiError) toast.error(err.message);
+        else toast.error("Could not update programme status");
+      } finally {
+        setStatusUpdatingUid(null);
+      }
+    },
+    []
+  );
+
   return (
     <div className="px-4 py-6 lg:px-8 lg:py-8 space-y-6">
       <Dialog open={newProgrammeDialogOpen} onOpenChange={setNewProgrammeDialogOpen}>
@@ -148,11 +263,79 @@ export default function MyConfigurationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={removeTarget != null} onOpenChange={(open) => !open && !removing && setRemoveTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove programme?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{removeTarget?.name}</span> will be removed from My
+            Configurations. Its loyalty rules will be archived and linked campaigns ended automatically. They will
+            no longer appear in My Rules or Campaigns. Historical points, ledger entries, and integration data are
+            kept for audit and compliance.
+          </p>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRemoveTarget(null)}
+              disabled={removing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={removing}
+              onClick={() => void confirmRemoveProgramme()}
+            >
+              {removing ? "Removing…" : "Remove from list"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={renameTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !renaming) setRenameTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename programme</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This updates the name in your programme list and in saved configuration (
+            <span className="font-mono text-xs">{renameTarget?.programmeUid}</span>).
+          </p>
+          <Input
+            autoFocus
+            placeholder="Programme name"
+            value={renameNameDraft}
+            onChange={(e) => setRenameNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void confirmRenameProgramme();
+              }
+            }}
+          />
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setRenameTarget(null)} disabled={renaming}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={renaming} onClick={() => void confirmRenameProgramme()}>
+              {renaming ? "Saving…" : "Save name"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">My Configurations</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Each programme has its own configuration (points economics, tiers, expiry, event schema).
+            Each programme has its own configuration. Turn integration on or off per programme so only the
+            programmes you use receive API traffic.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -209,6 +392,11 @@ export default function MyConfigurationsPage() {
           {filtered.map((r) => {
             const configured = r.hasConfig === true;
             const unknown = r.hasConfig === null;
+            const operationalStatus = (r.status || "DRAFT") as ProgrammeOperationalStatus;
+            const integrationActive = operationalStatus === "ACTIVE";
+            const statusBusy = statusUpdatingUid === r.programmeUid;
+            const canToggleIntegration =
+              operationalStatus !== "ARCHIVED" && !statusBusy && (configured || integrationActive);
             return (
               <Card
                 key={r.programmeUid}
@@ -216,17 +404,41 @@ export default function MyConfigurationsPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <ConfigStatusBadge configured={configured} unknown={unknown} />
+                      <IntegrationStatusBadge status={operationalStatus} />
                       <p className="text-sm font-semibold truncate">{r.name}</p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 truncate">
                       UID: {r.programmeUid}
                       {" · "}
-                      Programme status: {r.status || "—"}
-                      {" · "}
-                      Active config version: {r.activeConfigVersion ?? 0}
+                      Config version: {r.activeConfigVersion ?? 0}
                     </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {integrationActive
+                      ? "API events and balance calls are accepted for this programme UID."
+                      : configured
+                        ? "Turn on integration when this programme should receive API traffic."
+                        : "Save configuration before enabling integration."}
+                  </p>
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2">
+                    <span className="text-sm font-medium text-foreground">
+                      {statusBusy ? "Saving…" : integrationActive ? "Integration active" : "Integration inactive"}
+                    </span>
+                    <PillToggle
+                      pressed={integrationActive}
+                      disabled={!canToggleIntegration || statusBusy}
+                      onPressedChange={(next) => void setProgrammeIntegrationActive(r, next)}
+                      srLabel={
+                        integrationActive
+                          ? `Turn off integration for ${r.name}`
+                          : `Turn on integration for ${r.name}`
+                      }
+                    />
                   </div>
                 </div>
 
@@ -237,6 +449,26 @@ export default function MyConfigurationsPage() {
                       {configured ? "Edit configuration" : "Configure"}
                     </Button>
                   </Link>
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    size="sm"
+                    onClick={() => openRenameDialog(r)}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-2" />
+                    Rename
+                  </Button>
+                  {r.programmeUid !== "default" ? (
+                    <Button
+                      variant="outline"
+                      className="rounded-full text-destructive hover:text-destructive"
+                      size="sm"
+                      onClick={() => setRemoveTarget(r)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      Remove
+                    </Button>
+                  ) : null}
                 </div>
               </Card>
             );
@@ -244,6 +476,28 @@ export default function MyConfigurationsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IntegrationStatusBadge({ status }: { status: ProgrammeOperationalStatus }) {
+  if (status === "ACTIVE") {
+    return (
+      <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-widest text-sky-800 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-900/50">
+        Integration on
+      </span>
+    );
+  }
+  if (status === "ARCHIVED") {
+    return (
+      <span className="inline-flex items-center rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        Removed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-widest text-zinc-600 dark:bg-zinc-900/50 dark:text-zinc-300 dark:border-zinc-700">
+      Integration off
+    </span>
   );
 }
 

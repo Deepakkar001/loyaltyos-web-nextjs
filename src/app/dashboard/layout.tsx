@@ -66,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/configure/my-configurations", label: "My Configurations", icon: Search },
       { href: "/dashboard/setup/event-schema", label: "Event Schema", icon: DatabaseZap },
       { href: "/dashboard/setup/rewards-catalog", label: "Rewards Catalog", icon: Star },
+      { href: "/dashboard/setup/voucher-programs", label: "Voucher Programs", icon: Star },
     ],
   },
   {

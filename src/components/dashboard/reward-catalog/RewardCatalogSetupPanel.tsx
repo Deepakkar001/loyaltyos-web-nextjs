@@ -562,6 +562,20 @@ export function RewardCatalogSetupPanel() {
             )}
           </Card>
 
+          <Card className="p-5 border-border/70 bg-[var(--surface-sunken)] space-y-2">
+            <p className="text-sm font-semibold">Mixed voucher inventory</p>
+            <p className="text-sm text-muted-foreground">
+              Upload bulk partner files with multiple denominations (₹100, ₹200, …) and map loyalty points to each
+              tier on the dedicated voucher programs page — no need to split CSV files manually.
+            </p>
+            <Link
+              href="/dashboard/setup/voucher-programs"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full w-fit")}
+            >
+              Open voucher programs →
+            </Link>
+          </Card>
+
           {validationErrors.length > 0 && editing ? (
             <p className="text-sm text-amber-800 dark:text-amber-200">{validationErrors[0]}</p>
           ) : null}

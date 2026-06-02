@@ -144,8 +144,9 @@ export function KpiCard({
             </span>
           </div>
 
-          <div className="mt-auto pt-3 h-12">
-          <ResponsiveContainer width="100%" height="100%">
+          <div className="mt-auto pt-3 h-12 w-full min-w-0">
+            {sparkline.length > 0 ? (
+            <ResponsiveContainer width="100%" height={48} minWidth={0}>
             <LineChart data={sparkline}>
               <Line
                 type="monotone"
@@ -157,6 +158,7 @@ export function KpiCard({
               />
             </LineChart>
           </ResponsiveContainer>
+            ) : null}
           </div>
         </div>
       </div>

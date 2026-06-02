@@ -142,11 +142,18 @@ export interface CreateProgrammeRequest {
   name: string;
 }
 
+/** Lifecycle status on {@code programmes.status} (distinct from tenant onboarding ACTIVE). */
+export type ProgrammeOperationalStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+
 export interface ProgrammeSummaryResponse {
   programmeUid: string;
   name: string;
-  status: string;
+  status: ProgrammeOperationalStatus | string;
   activeConfigVersion: number;
+}
+
+export interface ProgrammeStatusPatchRequest {
+  status: "DRAFT" | "ACTIVE";
 }
 
 export interface UpsertProgrammeConfigRequest {

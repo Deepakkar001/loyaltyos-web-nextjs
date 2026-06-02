@@ -423,9 +423,9 @@ function DashboardHomeContent() {
             <p className="text-xs text-muted-foreground">
               {overview.engagement.activePct.toFixed(1)}% active (30-day window)
             </p>
-            <div className="mt-4 h-44">
+            <div className="mt-4 h-44 w-full min-w-0">
               {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="engagementFill" x1="0" y1="0" x2="0" y2="1">
@@ -480,9 +480,9 @@ function DashboardHomeContent() {
                 </p>
               </div>
             </div>
-            <div className="mt-4 h-64">
+            <div className="mt-4 h-64 w-full min-w-0">
               {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="issuedFill" x1="0" y1="0" x2="0" y2="1">
