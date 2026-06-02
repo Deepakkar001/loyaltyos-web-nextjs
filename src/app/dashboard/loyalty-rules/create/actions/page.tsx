@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldHelp } from "@/components/ui/field-help";
 import { NativeSelect } from "@/components/ui/native-select";
+import { PillToggle } from "@/components/ui/pill-toggle";
 import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
 import { useRewardCatalog } from "@/lib/rules/use-reward-catalog";
 
@@ -24,14 +25,29 @@ const schema = z
     actionMode: z.enum(["AWARD_POINTS", "ISSUE_CATALOG_REWARD"]),
     formula: z.string().max(512).optional(),
     catalogRewardUid: z.string().max(64).optional(),
+    autoIssue: z.boolean().optional(),
+    selectionMode: z.enum(["BY_POINTS", "BY_FACE_VALUE"]).optional(),
+    pointsToRedeem: z.number().positive().optional(),
+    faceValue: z.number().positive().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.actionMode === "AWARD_POINTS") {
       if (!data.formula?.trim()) {
         ctx.addIssue({ code: "custom", message: "Formula is required", path: ["formula"] });
       }
-    } else if (!data.catalogRewardUid?.trim()) {
-      ctx.addIssue({ code: "custom", message: "Select a catalog reward", path: ["catalogRewardUid"] });
+    } else {
+      if (!data.catalogRewardUid?.trim()) {
+        ctx.addIssue({ code: "custom", message: "Select a catalog reward", path: ["catalogRewardUid"] });
+      }
+      if (data.autoIssue) {
+        if (!data.selectionMode) {
+          ctx.addIssue({ code: "custom", message: "Select how to choose denomination", path: ["selectionMode"] });
+        } else if (data.selectionMode === "BY_POINTS" && !data.pointsToRedeem) {
+          ctx.addIssue({ code: "custom", message: "pointsToRedeem is required", path: ["pointsToRedeem"] });
+        } else if (data.selectionMode === "BY_FACE_VALUE" && !data.faceValue) {
+          ctx.addIssue({ code: "custom", message: "faceValue is required", path: ["faceValue"] });
+        }
+      }
     }
   });
 
@@ -47,10 +63,20 @@ export default function CreateRuleActionsPage() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { actionMode: "AWARD_POINTS", formula: "event.amount * 0.01", catalogRewardUid: "" },
+    defaultValues: {
+      actionMode: "AWARD_POINTS",
+      formula: "event.amount * 0.01",
+      catalogRewardUid: "",
+      autoIssue: false,
+      selectionMode: "BY_POINTS",
+      pointsToRedeem: 100,
+      faceValue: 100,
+    },
   });
 
   const actionMode = form.watch("actionMode");
+  const autoIssue = Boolean(form.watch("autoIssue"));
+  const selectionMode = form.watch("selectionMode") ?? "BY_POINTS";
 
   const catalogOptions = useMemo(
     () => activeItems.map((i) => ({ value: i.rewardUid, label: `${i.name} (${i.pointsCost} pts)` })),
@@ -64,18 +90,36 @@ export default function CreateRuleActionsPage() {
     const first = existing.actions?.[0];
     if (!first) return;
     if (first.actionType === "ISSUE_VOUCHER" && first.config && typeof first.config === "object") {
-      const cfg = first.config as { catalogRewardUid?: string };
+      const cfg = first.config as {
+        catalogRewardUid?: string;
+        issueMode?: string;
+        selectionMode?: "BY_POINTS" | "BY_FACE_VALUE";
+        pointsToRedeem?: number;
+        faceValue?: number;
+      };
       if (cfg.catalogRewardUid) {
         form.reset({
           actionMode: "ISSUE_CATALOG_REWARD",
           catalogRewardUid: cfg.catalogRewardUid,
+          autoIssue: cfg.issueMode === "AUTO_ISSUE_ON_EVENT",
+          selectionMode: cfg.selectionMode ?? "BY_POINTS",
+          pointsToRedeem: cfg.pointsToRedeem ?? 100,
+          faceValue: cfg.faceValue ?? 100,
           formula: "",
         });
         return;
       }
     }
     if (first.formula) {
-      form.reset({ actionMode: "AWARD_POINTS", formula: first.formula, catalogRewardUid: "" });
+      form.reset({
+        actionMode: "AWARD_POINTS",
+        formula: first.formula,
+        catalogRewardUid: "",
+        autoIssue: false,
+        selectionMode: "BY_POINTS",
+        pointsToRedeem: 100,
+        faceValue: 100,
+      });
     }
   }, [tenantId, draftScope, form]);
 
@@ -94,7 +138,13 @@ export default function CreateRuleActionsPage() {
             {
               actionType: "ISSUE_VOUCHER",
               formula: "0",
-              config: { catalogRewardUid: data.catalogRewardUid?.trim(), issueMode: "ON_RULE_MATCH" },
+              config: {
+                catalogRewardUid: data.catalogRewardUid?.trim(),
+                issueMode: data.autoIssue ? "AUTO_ISSUE_ON_EVENT" : "ON_RULE_MATCH",
+                selectionMode: data.autoIssue ? data.selectionMode : undefined,
+                pointsToRedeem: data.autoIssue && data.selectionMode === "BY_POINTS" ? data.pointsToRedeem : undefined,
+                faceValue: data.autoIssue && data.selectionMode === "BY_FACE_VALUE" ? data.faceValue : undefined,
+              },
             },
           ],
         },
@@ -152,8 +202,9 @@ export default function CreateRuleActionsPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Catalog reward *</Label>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Catalog reward *</Label>
               {catalogLoading ? (
                 <p className="text-xs text-muted-foreground">Loading catalog…</p>
               ) : catalogError ? (
@@ -177,6 +228,70 @@ export default function CreateRuleActionsPage() {
               {form.formState.errors.catalogRewardUid && (
                 <p className="text-xs text-red-600">{form.formState.errors.catalogRewardUid.message}</p>
               )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Auto-issue immediately</p>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, a voucher code is issued during event processing (no extra API call). Points awarding still works even if voucher issuance fails.
+                  </p>
+                </div>
+                <PillToggle
+                  pressed={autoIssue}
+                  onPressedChange={(next) => form.setValue("autoIssue", Boolean(next))}
+                  srLabel={autoIssue ? "Disable auto-issue voucher" : "Enable auto-issue voucher"}
+                />
+              </div>
+
+              {autoIssue ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Select denomination by *</Label>
+                    <NativeSelect
+                      ariaLabel="Denomination selection mode"
+                      value={selectionMode}
+                      onChange={(v) => form.setValue("selectionMode", v as FormData["selectionMode"])}
+                      options={[
+                        { value: "BY_POINTS", label: "Points to redeem (tier match)" },
+                        { value: "BY_FACE_VALUE", label: "Voucher face value (₹)" },
+                      ]}
+                    />
+                    {form.formState.errors.selectionMode && (
+                      <p className="text-xs text-red-600">{form.formState.errors.selectionMode.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">
+                      {selectionMode === "BY_POINTS" ? "pointsToRedeem *" : "faceValue *"}
+                    </Label>
+                    {selectionMode === "BY_POINTS" ? (
+                      <Input
+                        type="number"
+                        min={1}
+                        step="1"
+                        {...form.register("pointsToRedeem", { valueAsNumber: true })}
+                      />
+                    ) : (
+                      <Input
+                        type="number"
+                        min={1}
+                        step="1"
+                        {...form.register("faceValue", { valueAsNumber: true })}
+                      />
+                    )}
+                    {selectionMode === "BY_POINTS" && form.formState.errors.pointsToRedeem ? (
+                      <p className="text-xs text-red-600">{form.formState.errors.pointsToRedeem.message}</p>
+                    ) : null}
+                    {selectionMode === "BY_FACE_VALUE" && form.formState.errors.faceValue ? (
+                      <p className="text-xs text-red-600">{form.formState.errors.faceValue.message}</p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Must match a configured voucher denomination tier exactly (no best-match selection).
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 

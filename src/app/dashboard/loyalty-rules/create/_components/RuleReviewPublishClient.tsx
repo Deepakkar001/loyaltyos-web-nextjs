@@ -221,10 +221,74 @@ export function RuleReviewPublishClient() {
               <Separator />
               <section className="space-y-2">
                 <p className="text-sm font-semibold">Actions</p>
-                <p className="text-sm text-muted-foreground">
-                  Award Points formula:{" "}
-                  <span className="text-foreground font-medium">{draft.actions?.[0]?.formula ?? "—"}</span>
-                </p>
+                {(() => {
+                  const a = draft.actions?.[0];
+                  if (!a) {
+                    return <p className="text-sm text-muted-foreground">No actions configured.</p>;
+                  }
+                  if (a.actionType === "AWARD_POINTS") {
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        Award Points formula:{" "}
+                        <span className="text-foreground font-medium">{a.formula ?? "—"}</span>
+                      </p>
+                    );
+                  }
+                  if (a.actionType === "ISSUE_VOUCHER") {
+                    const cfg = (a.config ?? {}) as Record<string, unknown>;
+                    const catalogRewardUid = typeof cfg.catalogRewardUid === "string" ? cfg.catalogRewardUid : "—";
+                    const issueMode = typeof cfg.issueMode === "string" ? cfg.issueMode : "ON_RULE_MATCH";
+                    const auto = issueMode === "AUTO_ISSUE_ON_EVENT";
+                    const selectionMode = typeof cfg.selectionMode === "string" ? cfg.selectionMode : undefined;
+                    const pointsToRedeem = cfg.pointsToRedeem;
+                    const faceValue = cfg.faceValue;
+                    return (
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <div>
+                          Grant catalog reward:{" "}
+                          <span className="text-foreground font-medium">{catalogRewardUid}</span>
+                        </div>
+                        <div>
+                          Auto-issue immediately:{" "}
+                          <span className="text-foreground font-medium">{auto ? "ON" : "OFF"}</span>
+                        </div>
+                        {auto ? (
+                          <>
+                            <div>
+                              Select denomination by:{" "}
+                              <span className="text-foreground font-medium">{selectionMode ?? "—"}</span>
+                            </div>
+                            {selectionMode === "BY_POINTS" ? (
+                              <div>
+                                pointsToRedeem:{" "}
+                                <span className="text-foreground font-medium">
+                                  {typeof pointsToRedeem === "number" || typeof pointsToRedeem === "string"
+                                    ? String(pointsToRedeem)
+                                    : "—"}
+                                </span>
+                              </div>
+                            ) : null}
+                            {selectionMode === "BY_FACE_VALUE" ? (
+                              <div>
+                                faceValue:{" "}
+                                <span className="text-foreground font-medium">
+                                  {typeof faceValue === "number" || typeof faceValue === "string"
+                                    ? String(faceValue)
+                                    : "—"}
+                                </span>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </div>
+                    );
+                  }
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      Action: <span className="text-foreground font-medium">{a.actionType}</span>
+                    </p>
+                  );
+                })()}
               </section>
               <Separator />
               <section className="space-y-2">
