@@ -8,7 +8,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge";
+import { CampaignTargetAudiencePanel } from "@/components/campaigns/CampaignTargetAudiencePanel";
 import { campaignsAdminApi } from "@/lib/api/client";
+import { canEditCampaign } from "@/lib/campaigns/campaign-editability";
+import { formatCustomerScopeLabel } from "@/lib/campaigns/campaign-form";
 import { formatTriggerEventTypesLabel } from "@/lib/campaigns/trigger-event-types";
 import type {
   CampaignParticipationResponse,
@@ -47,6 +50,11 @@ export default function CampaignDetailPage() {
     reload();
   }, [reload]);
 
+  /** Keep count in sync after upload/remove without re-running full page reload (avoids render loop). */
+  const handleTargetCustomerCountChange = useCallback((count: number) => {
+    setCampaign((prev) => (prev ? { ...prev, customerCount: count } : prev));
+  }, []);
+
   const runAction = async (action: "activate" | "pause" | "end") => {
     try {
       if (action === "activate") await campaignsAdminApi.activateCampaign(campaignUid);
@@ -67,6 +75,11 @@ export default function CampaignDetailPage() {
     );
   }
 
+  const targetedBlocked =
+    campaign.customerScope === "TARGETED" && (campaign.customerCount ?? 0) <= 0;
+  const canActivate = campaign.status === "DRAFT" || campaign.status === "PAUSED";
+  const canEdit = canEditCampaign(campaign.status);
+
   return (
     <div className="space-y-6">
       <div>
@@ -81,19 +94,29 @@ export default function CampaignDetailPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {campaign.programmeUid} · {formatTriggerEventTypesLabel(campaign.triggerEventType)} ·{" "}
+              {formatCustomerScopeLabel(campaign.customerScope, campaign.customerCount)} ·{" "}
               {campaign.campaignUid}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            {campaign.status === "DRAFT" && (
+            {canEdit && (
               <Link href={`/dashboard/campaigns/${encodeURIComponent(campaignUid)}/edit`}>
                 <Button variant="outline" className="rounded-full">
                   Edit
                 </Button>
               </Link>
             )}
-            {(campaign.status === "DRAFT" || campaign.status === "PAUSED") && (
-              <Button className="rounded-full" onClick={() => runAction("activate")}>
+            {canActivate && (
+              <Button
+                className="rounded-full"
+                disabled={targetedBlocked}
+                title={
+                  targetedBlocked
+                    ? "Upload a customer list before activating a targeted campaign"
+                    : undefined
+                }
+                onClick={() => runAction("activate")}
+              >
                 Activate
               </Button>
             )}
@@ -131,6 +154,28 @@ export default function CampaignDetailPage() {
           <p className="text-lg font-semibold mt-1">{stats.budgetConsumedPct}%</p>
         </Card>
       </div>
+
+      <Card className="p-5 border-border/70 bg-[var(--surface-card)] space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">Target audience</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {formatCustomerScopeLabel(campaign.customerScope, campaign.customerCount)}
+          </p>
+        </div>
+        {campaign.customerScope === "TARGETED" && canEdit ? (
+          <CampaignTargetAudiencePanel
+            campaignUid={campaignUid}
+            customerCount={campaign.customerCount ?? 0}
+            onCustomerCountChange={handleTargetCustomerCountChange}
+          />
+        ) : campaign.customerScope === "TARGETED" ? (
+          <p className="text-sm text-muted-foreground">
+            {(campaign.customerCount ?? 0) > 0
+              ? `${campaign.customerCount} customers in the target list.`
+              : "No customers in the target list."}
+          </p>
+        ) : null}
+      </Card>
 
       <Card className="p-5 border-border/70 bg-[var(--surface-card)]">
         <h2 className="text-sm font-semibold mb-3">Recent participations</h2>

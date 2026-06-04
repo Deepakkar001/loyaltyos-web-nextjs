@@ -2,6 +2,9 @@
 
 import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
 import { summarizeCampaignCreateEventSchema } from "@/lib/campaigns/campaign-create-event-schema";
+import { formatCustomerScopeLabel } from "@/lib/campaigns/campaign-form";
+import { campaignsAdminApi } from "@/lib/api/client";
+import { useEffect, useState } from "react";
 import { useProgrammeDropdown } from "@/lib/programme/use-programme-dropdown";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { Button } from "@/components/ui/button";
@@ -26,6 +29,19 @@ export default function CreateCampaignReviewPage() {
   const { submit, saving } = useCampaignCreateSubmit();
   const tenantId = useOnboardingStore((s) => s.tenantId);
   const { resolveLabel } = useProgrammeDropdown(tenantId, form.programmeUid);
+  const [targetCount, setTargetCount] = useState<number | undefined>();
+
+  useEffect(() => {
+    if (!form.draftCampaignUid) return;
+    void (async () => {
+      try {
+        const c = await campaignsAdminApi.getCampaign(form.draftCampaignUid!);
+        setTargetCount(c.customerCount ?? 0);
+      } catch {
+        setTargetCount(undefined);
+      }
+    })();
+  }, [form.draftCampaignUid]);
 
   return (
     <CreateCampaignShell title="Review">
@@ -42,6 +58,10 @@ export default function CreateCampaignReviewPage() {
             <ReviewRow label="Programme" value={resolveLabel(form.programmeUid)} />
             <ReviewRow label="Name" value={form.name} />
             {form.description ? <ReviewRow label="Description" value={form.description} /> : null}
+            <ReviewRow
+              label="Audience"
+              value={formatCustomerScopeLabel(form.customerScope, targetCount)}
+            />
             <ReviewRow
               label="Schedule"
               value={`${form.validFromLocal || "—"} → ${form.validUntilLocal || "—"}`}
@@ -67,7 +87,7 @@ export default function CreateCampaignReviewPage() {
           </Button>
         </div>
 
-        <CampaignCreateStepNav stepIndex={3} />
+        <CampaignCreateStepNav stepIndex={4} />
       </div>
     </CreateCampaignShell>
   );

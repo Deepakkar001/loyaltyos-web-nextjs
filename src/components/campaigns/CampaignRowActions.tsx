@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { campaignsAdminApi } from "@/lib/api/client";
+import { canEditCampaign } from "@/lib/campaigns/campaign-editability";
 import type { CampaignResponse } from "@/types/campaigns";
 
 type CampaignRowActionsProps = {
@@ -33,8 +34,10 @@ export function CampaignRowActions({ campaign, onUpdated }: CampaignRowActionsPr
     }
   };
 
-  const canEdit = campaign.status === "DRAFT";
+  const canEdit = canEditCampaign(campaign.status);
   const canActivate = campaign.status === "DRAFT" || campaign.status === "PAUSED";
+  const targetedBlocked =
+    campaign.customerScope === "TARGETED" && (campaign.customerCount ?? 0) <= 0;
   const canPause = campaign.status === "ACTIVE";
   const isTerminal =
     campaign.status === "ENDED" ||
@@ -61,7 +64,12 @@ export function CampaignRowActions({ campaign, onUpdated }: CampaignRowActionsPr
           variant="ghost"
           size="sm"
           className="h-8 rounded-full"
-          disabled={busy !== null}
+          disabled={busy !== null || targetedBlocked}
+          title={
+            targetedBlocked
+              ? "Upload a customer list before activating a targeted campaign"
+              : undefined
+          }
           onClick={() => run("activate")}
         >
           {busy === "activate" ? "…" : "Activate"}

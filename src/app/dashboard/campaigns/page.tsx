@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { campaignsAdminApi, programmeApiV2 } from "@/lib/api/client";
+import { formatCustomerScopeLabel } from "@/lib/campaigns/campaign-form";
 import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
 import type { CampaignResponse, CampaignStatus } from "@/types/campaigns";
 
@@ -257,6 +258,7 @@ export default function CampaignsListPage() {
                   <th className="px-4 py-3 min-w-[160px]">Name</th>
                   <th className="px-4 py-3 min-w-[100px]">Type</th>
                   <th className="px-4 py-3 min-w-[90px]">Status</th>
+                  <th className="px-4 py-3 min-w-[140px]">Audience</th>
                   <th className="px-4 py-3 min-w-[220px]">Valid from → Valid until</th>
                   <th className="px-4 py-3 min-w-[140px]">Budget progress</th>
                   <th className="px-4 py-3 w-16 text-center">Priority</th>
@@ -280,6 +282,9 @@ export default function CampaignsListPage() {
                     <td className="px-4 py-3 text-muted-foreground">{c.campaignType}</td>
                     <td className="px-4 py-3">
                       <CampaignStatusBadge status={c.status} />
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                      {formatCustomerScopeLabel(c.customerScope, c.customerCount)}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
                       {formatSchedule(c.validFrom, c.validUntil)}

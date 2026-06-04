@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { CampaignForm } from "@/components/campaigns/CampaignForm";
 import { Card } from "@/components/ui/card";
 import { campaignsAdminApi } from "@/lib/api/client";
+import { canEditCampaign } from "@/lib/campaigns/campaign-editability";
 import type { CampaignResponse } from "@/types/campaigns";
 
 export default function EditCampaignPage() {
@@ -51,10 +52,10 @@ export default function EditCampaignPage() {
     );
   }
 
-  if (campaign.status !== "DRAFT") {
+  if (!canEditCampaign(campaign.status)) {
     return (
       <Card className="p-8 border-border/70 bg-[var(--surface-card)]">
-        <p className="text-sm">Only DRAFT campaigns can be edited.</p>
+        <p className="text-sm">Only draft or paused campaigns can be edited.</p>
         <Link href={detailHref} className="text-sm underline mt-2 inline-block">
           Back to details
         </Link>

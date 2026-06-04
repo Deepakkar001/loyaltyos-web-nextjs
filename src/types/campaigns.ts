@@ -1,5 +1,7 @@
 export type CampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "EXHAUSTED" | "EXPIRED" | "ENDED";
 
+export type CustomerScope = "ALL" | "TARGETED";
+
 export type StackMode = "ADDITIVE" | "BEST_OFFER" | "FIRST_MATCH";
 
 export type CampaignAwardType =
@@ -45,6 +47,7 @@ export interface CampaignUpsertRequest {
   merchantId?: string;
   validFrom: string;
   validUntil: string;
+  customerScope?: CustomerScope;
 }
 
 export interface CampaignEventSchemaUpsertRequest {
@@ -82,6 +85,55 @@ export interface CampaignResponse {
   createdAt?: string;
   updatedAt?: string;
   budgetExceedsApprovalThreshold?: boolean;
+  customerScope?: CustomerScope;
+  customerCount?: number;
+}
+
+export interface CampaignTargetUploadColumnSpec {
+  name: string;
+  required: boolean;
+  dataType: string;
+  description: string;
+  example: string;
+}
+
+export interface CampaignTargetUploadSpecResponse {
+  format: string;
+  encoding: string;
+  maxFileSizeMb: number;
+  maxRows: number;
+  standardHeaders: string[];
+  columns: CampaignTargetUploadColumnSpec[];
+  exampleCsv: string;
+  exampleFilename: string;
+  notes: string[];
+}
+
+export interface CampaignTargetUploadResponse {
+  uploadUid?: string;
+  status?: string;
+  totalRowsUploaded?: number;
+  importedCount?: number;
+  duplicateCount?: number;
+  errorCount?: number;
+  errorReport?: Array<{ row: number; customerId: string; reason: string }>;
+  uploadedAt?: string;
+  completedAt?: string;
+  errorMessage?: string;
+}
+
+export interface CampaignTargetCustomerResponse {
+  customerId: string;
+  addedAt?: string;
+  addedBy?: string;
+}
+
+export interface CampaignTargetCustomerPageResponse {
+  content: CampaignTargetCustomerResponse[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
 }
 
 export interface CampaignStatsResponse {

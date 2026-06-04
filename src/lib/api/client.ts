@@ -24,6 +24,9 @@ import {
   CampaignResponse,
   CampaignStatsResponse,
   CampaignStatus,
+  CampaignTargetCustomerPageResponse,
+  CampaignTargetUploadResponse,
+  CampaignTargetUploadSpecResponse,
   CampaignUpsertRequest,
 } from "@/types/campaigns";
 import type {
@@ -736,6 +739,76 @@ export const campaignsAdminApi = {
       const res = await apiClient.get<CampaignParticipationResponse[]>(
         `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/participations`,
         { params: { limit } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getTargetUploadSpec: async (): Promise<CampaignTargetUploadSpecResponse> => {
+    try {
+      const res = await apiClient.get<CampaignTargetUploadSpecResponse>(
+        "/api/v1/campaigns/admin/campaigns/target-customers/upload-spec"
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  uploadTargetCustomers: async (
+    campaignUid: string,
+    file: File
+  ): Promise<CampaignTargetUploadResponse> => {
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await apiClient.post<CampaignTargetUploadResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/target-customers/upload`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 }
+      );
+      const body = res.data;
+      if (body?.status === "FAILED" && body.errorMessage) {
+        throw new ApiError({
+          timestamp: new Date().toISOString(),
+          status: res.status,
+          error: "UPLOAD_FAILED",
+          message: body.errorMessage,
+          path: `/api/v1/campaigns/admin/campaigns/${campaignUid}/target-customers/upload`,
+        });
+      }
+      return body;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  listTargetCustomers: async (
+    campaignUid: string,
+    params?: { page?: number; size?: number; search?: string }
+  ): Promise<CampaignTargetCustomerPageResponse> => {
+    try {
+      const res = await apiClient.get<CampaignTargetCustomerPageResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/target-customers`,
+        { params }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  removeTargetCustomer: async (campaignUid: string, customerId: string): Promise<void> => {
+    try {
+      await apiClient.delete(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/target-customers/${encodeURIComponent(customerId)}`
+      );
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  listTargetUploads: async (campaignUid: string): Promise<CampaignTargetUploadResponse[]> => {
+    try {
+      const res = await apiClient.get<CampaignTargetUploadResponse[]>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/target-customers/uploads`
       );
       return res.data;
     } catch (err) {

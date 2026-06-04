@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useState } from "react";
 
+import { CampaignAudienceSection } from "@/components/campaigns/CampaignAudienceSection";
 import {
   CampaignBasicInfoSection,
   CampaignBudgetSection,
@@ -51,6 +52,19 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
       return;
     }
 
+    if (form.customerScope === "TARGETED") {
+      try {
+        const c = await campaignsAdminApi.getCampaign(campaignUid);
+        if ((c.customerCount ?? 0) <= 0) {
+          toast.error("Upload a customer CSV list for targeted campaigns.");
+          return;
+        }
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Could not verify customer list");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await campaignsAdminApi.updateCampaign(campaignUid, built.payload);
@@ -66,6 +80,10 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
   return (
     <div className="space-y-6 pb-10">
       <CampaignBasicInfoSection />
+      <Card className="p-6 border-border/70 bg-[var(--surface-card)]">
+        <h2 className="text-sm font-semibold mb-4">Target audience</h2>
+        <CampaignAudienceSection campaignUid={campaignUid} />
+      </Card>
       <CampaignBudgetSection />
 
       <div className="flex flex-wrap items-center gap-3 pt-2">

@@ -31,13 +31,34 @@ export function useCampaignCreateSubmit() {
       return;
     }
 
+    if (form.customerScope === "TARGETED") {
+      const uid = form.draftCampaignUid;
+      if (!uid) {
+        toast.error("Save campaign and upload customer list before publishing.");
+        return;
+      }
+      try {
+        const c = await campaignsAdminApi.getCampaign(uid);
+        if ((c.customerCount ?? 0) <= 0) {
+          toast.error("Upload a customer CSV list for targeted campaigns.");
+          return;
+        }
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Could not verify customer list");
+        return;
+      }
+    }
+
     setSaving(action);
     try {
-      const created = await campaignsAdminApi.createCampaign(built.payload);
+      const draftUid = form.draftCampaignUid?.trim();
+      const saved = draftUid
+        ? await campaignsAdminApi.updateCampaign(draftUid, built.payload)
+        : await campaignsAdminApi.createCampaign(built.payload);
 
       if (campaignCreateHasEventSchemaContent(eventSchemaDraft)) {
         try {
-          await campaignsAdminApi.upsertCampaignEventSchema(created.campaignUid, {
+          await campaignsAdminApi.upsertCampaignEventSchema(saved.campaignUid, {
             eventSchema: buildEventSchemaJsonNode(eventSchemaDraft),
           });
         } catch (schemaSaveErr) {
@@ -48,20 +69,20 @@ export function useCampaignCreateSubmit() {
                 ? schemaSaveErr.message
                 : "Failed to save event schema";
           toast.error(
-            `Campaign created but event schema was not saved: ${msg}. Update it under Event Schema.`
+            `Campaign saved but event schema was not saved: ${msg}. Update it under Event Schema.`
           );
           clearDraft();
-          router.push(`/dashboard/campaigns/${encodeURIComponent(created.campaignUid)}`);
+          router.push(`/dashboard/campaigns/${encodeURIComponent(saved.campaignUid)}`);
           return;
         }
       }
 
       if (action === "activate") {
-        await campaignsAdminApi.activateCampaign(created.campaignUid);
+        await campaignsAdminApi.activateCampaign(saved.campaignUid);
         toast.success(
           campaignCreateHasEventSchemaContent(eventSchemaDraft)
-            ? "Campaign created with event schema and activated"
-            : "Campaign created and activated"
+            ? "Campaign saved with event schema and activated"
+            : "Campaign saved and activated"
         );
       } else {
         toast.success(
@@ -71,7 +92,7 @@ export function useCampaignCreateSubmit() {
         );
       }
       clearDraft();
-      router.push(`/dashboard/campaigns/${encodeURIComponent(created.campaignUid)}`);
+      router.push(`/dashboard/campaigns/${encodeURIComponent(saved.campaignUid)}`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save campaign");
     } finally {

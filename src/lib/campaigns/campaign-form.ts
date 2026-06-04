@@ -3,6 +3,7 @@ import type {
   CampaignResponse,
   CampaignTargetSegment,
   CampaignUpsertRequest,
+  CustomerScope,
 } from "@/types/campaigns";
 import type { EventSchemaDraft } from "@/lib/programme/event-schema-merge";
 import { validateCampaignCreateEventSchemaStep } from "@/lib/campaigns/campaign-create-event-schema";
@@ -44,6 +45,9 @@ export type CampaignFormState = {
   triggerEventType: string;
   budgetTotal: string;
   alertThresholdPct: string;
+  customerScope: CustomerScope;
+  /** Set after first draft save during create wizard (enables CSV upload on audience step). */
+  draftCampaignUid?: string;
 };
 
 export function datetimeLocalToIso(local: string): string {
@@ -69,6 +73,8 @@ export function campaignToFormState(c: CampaignResponse): CampaignFormState {
     triggerEventType: c.triggerEventType ?? "",
     budgetTotal: String(c.budgetTotal ?? ""),
     alertThresholdPct: c.alertThresholdPct != null ? String(c.alertThresholdPct) : "80",
+    customerScope: c.customerScope ?? "ALL",
+    draftCampaignUid: c.campaignUid,
   };
 }
 
@@ -82,6 +88,7 @@ export function defaultCreateFormState(): CampaignFormState {
     triggerEventType: "",
     budgetTotal: "10000",
     alertThresholdPct: "80",
+    customerScope: "ALL",
   };
 }
 
@@ -161,6 +168,7 @@ export function buildCampaignUpsertPayload(
     budgetTotal: budget,
     alertThresholdPct: alertThresholdPct.trim() ? Number(alertThresholdPct) : 80,
     priority: 0,
+    customerScope: state.customerScope ?? "ALL",
   };
 
   const seg = ctx.preserveTargetSegment;
@@ -171,22 +179,41 @@ export function buildCampaignUpsertPayload(
   return { ok: true, payload };
 }
 
-export const CAMPAIGN_CREATE_STEP_SLUGS = ["basic-info", "events", "budget", "review"] as const;
+export const CAMPAIGN_CREATE_STEP_SLUGS = ["basic-info", "audience", "events", "budget", "review"] as const;
 
 export type CampaignCreateStepSlug = (typeof CAMPAIGN_CREATE_STEP_SLUGS)[number];
 
+export function formatCustomerScopeLabel(
+  scope?: CustomerScope,
+  customerCount?: number
+): string {
+  if (scope === "TARGETED") {
+    const n = customerCount ?? 0;
+    return n > 0 ? `Specific customers (${n})` : "Specific customers (no list yet)";
+  }
+  return "All customers";
+}
+
 export const CAMPAIGN_CREATE_STEPS: Array<{ slug: CampaignCreateStepSlug; label: string }> = [
   { slug: "basic-info", label: "Basic Info" },
+  { slug: "audience", label: "Targeted Audience" },
   { slug: "events", label: "Events" },
   { slug: "budget", label: "Budget" },
   { slug: "review", label: "Review" },
 ];
 
+export type ValidateCampaignStepOptions = {
+  eventSchemaDraft?: EventSchemaDraft;
+  /** Latest customer_count from API (audience step). */
+  targetCustomerCount?: number;
+};
+
 export function validateCampaignCreateStep(
   stepIndex: number,
   state: CampaignFormState,
-  eventSchemaDraft?: EventSchemaDraft
+  options?: ValidateCampaignStepOptions
 ): string | null {
+  const eventSchemaDraft = options?.eventSchemaDraft;
   switch (stepIndex) {
     case 0:
       if (!state.programmeUid?.trim()) return "Programme is required";
@@ -203,18 +230,29 @@ export function validateCampaignCreateStep(
       }
       return null;
     case 1:
+      if (!state.draftCampaignUid?.trim()) {
+        return "Save basic info first (use Next on Basic Info)";
+      }
+      if (state.customerScope === "TARGETED") {
+        const count = options?.targetCustomerCount ?? 0;
+        if (count <= 0) {
+          return "Upload a customer CSV list before continuing";
+        }
+      }
+      return null;
+    case 2:
       if (eventSchemaDraft) {
         return validateCampaignCreateEventSchemaStep(eventSchemaDraft);
       }
       return null;
-    case 2: {
+    case 3: {
       const budget = Number(state.budgetTotal);
       if (!Number.isFinite(budget) || budget <= 0) {
         return "Total budget must be greater than zero";
       }
       return null;
     }
-    case 3:
+    case 4:
       return null;
     default:
       return null;
