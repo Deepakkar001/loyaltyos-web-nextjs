@@ -30,6 +30,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { useReferralNavStore } from "@/lib/referrals/referral-nav-store";
 import { ensureAuthSession, onboardingApi } from "@/lib/api/client";
 import { STATUS_TO_STEP, type OnboardingStatus } from "@/types/onboarding";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
@@ -86,6 +87,15 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Referrals",
+    items: [
+      { href: "/dashboard/referrals/my-referrals", label: "My Referrals", icon: Users },
+      { href: "/dashboard/referrals/create", label: "Create Referral", icon: GitBranchPlus },
+      { href: "/dashboard/referrals/analytics", label: "Referral Analytics", icon: BarChart3 },
+      { href: "/dashboard/referrals/fraud-review", label: "Fraud Review", icon: ShieldCheck },
+    ],
+  },
+  {
     label: "Analytics & Reports",
     items: [
       { href: "/dashboard/analytics/custom-reports", label: "Custom Reports", icon: BarChart3 },
@@ -125,6 +135,7 @@ const NAV_GROUPS: NavGroup[] = [
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { onboardingStatus } = useOnboardingStore();
+  const fraudQueueCount = useReferralNavStore((s) => s.fraudQueueCount);
 
   const navGroups = useMemo(
     () =>
@@ -164,6 +175,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                 (item.href === "/dashboard/loyalty-rules/create/basic-info" && onboardingStatus === "CONFIGURED") ||
                 (item.href === INTEGRATIONS_HREF && onboardingStatus === "RULES_CONFIGURED") ||
                 (item.href === "/dashboard/go-live" && onboardingStatus === "SANDBOX_TESTING");
+              const showFraudBadge =
+                item.href === "/dashboard/referrals/fraud-review" && fraudQueueCount > 0;
               return (
                 <Link
                   key={item.href}
@@ -179,6 +192,11 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                 >
                   <Icon className={cn("h-4 w-4", "text-current")} />
                   <span className="truncate">{item.label}</span>
+                  {showFraudBadge ? (
+                    <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-xs text-destructive-foreground">
+                      {fraudQueueCount}
+                    </span>
+                  ) : null}
                   {showDot ? (
                     <span
                       aria-label="Action required"

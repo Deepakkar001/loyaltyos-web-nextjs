@@ -963,6 +963,331 @@ export const voucherApi = {
   },
 };
 
+export type ReferralRewardType = "POINTS" | "VOUCHER";
+
+export type ReferralPartyRewardConfig = {
+  type?: ReferralRewardType;
+  points?: number;
+  catalogRewardUid?: string;
+  voucherFaceValue?: number;
+  voucherPointsToRedeem?: number;
+};
+
+export type ReferralPointsBudget = {
+  maxPoints?: number;
+  period?: "LIFETIME" | "CALENDAR_MONTH" | "ROLLING_DAY";
+  windowDays?: number;
+};
+
+export type ReferralStageConfig = {
+  stage: number;
+  type: string;
+  condition?: Record<string, unknown>;
+  referrerPoints?: number;
+  refereePoints?: number;
+  maxReferrerAwardsForStage?: number;
+  referrerReward?: ReferralPartyRewardConfig;
+  refereeReward?: ReferralPartyRewardConfig;
+};
+
+export type ReferralEligibilityRules = {
+  refereeMustBeNewCustomer?: boolean;
+  referrerMustHaveLedgerActivity?: boolean;
+};
+
+export type ReferralCapRule = {
+  type: "LIFETIME_REFERRALS" | "CALENDAR_MONTH_REFERRALS" | "ROLLING_DAY_REFERRALS";
+  maxCount?: number;
+  windowDays?: number;
+};
+
+export type ReferralFraudPolicy = {
+  blockSelfReferralByCustomerId?: boolean;
+  maxReferralsPer24Hours?: number;
+  matchPhoneWhenProvided?: boolean;
+  matchEmailWhenProvided?: boolean;
+  matchDeviceWhenProvided?: boolean;
+};
+
+export type ReferralRuleCriteria = {
+  windowDays?: number;
+  minPurchaseCount?: number;
+  minSpend?: number;
+  firstPurchaseOnly?: boolean;
+  merchantId?: string;
+  category?: string;
+  channel?: string;
+  sku?: string;
+  region?: string;
+  eventTypes?: string[];
+  /** Optional equality filters on event metadata (schema fields not mapped to first-class keys). */
+  metadataFilters?: Record<string, string>;
+};
+
+export type ReferralMilestoneRule = {
+  key: string;
+  label: string;
+  description?: string;
+  enabled?: boolean;
+  trigger: "LINK" | "PURCHASE" | "INTEGRATION_EVENT";
+  criteria?: ReferralRuleCriteria;
+};
+
+export type ReferralMilestoneTypeInfo = {
+  value: string;
+  label: string;
+  description?: string;
+  trigger?: string;
+  custom?: boolean;
+  enabled?: boolean;
+};
+
+export type ReferralRuleSchemaResponse = {
+  triggers: { value: string; label: string; description?: string }[];
+  criteriaFields: {
+    key: string;
+    label: string;
+    type: string;
+    hint?: string;
+    purchaseOnly?: boolean;
+  }[];
+  programmeUid?: string;
+  programmeEventTypes?: string[];
+  criteriaFieldsByEvent?: Record<
+    string,
+    { key: string; label: string; type: string; hint?: string; purchaseOnly?: boolean }[]
+  >;
+  templates: {
+    key: string;
+    label: string;
+    description?: string;
+    trigger: string;
+    criteriaDefaults?: Record<string, unknown>;
+  }[];
+};
+
+export type ReferralProgrammeConfig = {
+  stages: ReferralStageConfig[];
+  milestoneRules?: ReferralMilestoneRule[];
+  eligibility?: ReferralEligibilityRules;
+  capRules?: ReferralCapRule[];
+  fraudPolicy?: ReferralFraudPolicy;
+  pointsBudget?: ReferralPointsBudget;
+};
+
+export type ReferralProgrammeResponse = {
+  programmeUid: string;
+  name: string;
+  status: string;
+  validFrom?: string;
+  validUntil?: string;
+  maxReferralsPerCustomer: number;
+  config: ReferralProgrammeConfig;
+  milestoneTypes?: ReferralMilestoneTypeInfo[];
+};
+
+export type ReferralProgrammeUpsertRequest = {
+  programmeUid?: string;
+  name: string;
+  description?: string;
+  status?: string;
+  maxReferralsPerCustomer?: number;
+  config: ReferralProgrammeConfig;
+};
+
+export type ReferralDashboardResponse = {
+  totalReferrals: number;
+  signedUp: number;
+  rewarded: number;
+  fraudFlagged: number;
+  totalPointsIssued: number;
+  conversionRatePercent?: number;
+  averagePointsPerReferral?: number;
+};
+
+export type ReferralListItem = {
+  referralUid: string;
+  referrerCustomerId: string;
+  refereeCustomerId: string;
+  status: string;
+  referralCodeUsed?: string;
+  purchaseCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ReferralFraudQueueItem = {
+  referralUid: string;
+  referrerCustomerId: string;
+  refereeCustomerId: string;
+  referralCodeUsed?: string;
+  fraudReasons: string[];
+  createdAt?: string;
+};
+
+export type ReferralTrendPoint = {
+  periodStart: string;
+  referrals: number;
+  rewarded: number;
+};
+
+export type ReferralTopReferrer = {
+  referrerCustomerId: string;
+  referralCount: number;
+  rewardedCount: number;
+};
+
+export type ReferralTimeToPurchase = {
+  averageHoursToFirstPurchase: number;
+  sampleSize: number;
+};
+
+export const referralApi = {
+  getRuleSchema: async (programmeUid?: string): Promise<ReferralRuleSchemaResponse> => {
+    try {
+      const res = await apiClient.get<ReferralRuleSchemaResponse>(
+        "/api/v1/me/referrals/rule-schema",
+        { params: programmeUid ? { programmeUid } : undefined }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getProgramme: async (programmeUid = "default"): Promise<ReferralProgrammeResponse | null> => {
+    try {
+      const res = await apiClient.get<ReferralProgrammeResponse>("/api/v1/me/referrals/programmes", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      const ax = err as AxiosError<ApiErrorResponse>;
+      if (ax.response?.status === 404) return null;
+      handleError(ax);
+    }
+  },
+  upsertProgramme: async (body: ReferralProgrammeUpsertRequest) => {
+    try {
+      const res = await apiClient.post("/api/v1/me/referrals/programmes", body);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getDashboard: async (programmeUid = "default"): Promise<ReferralDashboardResponse> => {
+    try {
+      const res = await apiClient.get<ReferralDashboardResponse>("/api/v1/me/referrals/dashboard", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  listReferrals: async (programmeUid = "default", status?: string): Promise<ReferralListItem[]> => {
+    try {
+      const res = await apiClient.get<ReferralListItem[]>("/api/v1/me/referrals/list", {
+        params: { programmeUid, status: status || undefined },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  exportCsv: async (programmeUid = "default", status?: string): Promise<Blob> => {
+    try {
+      const res = await apiClient.get("/api/v1/me/referrals/export", {
+        params: { programmeUid, status: status || undefined },
+        responseType: "blob",
+      });
+      return res.data as Blob;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  listFraudQueue: async (programmeUid = "default"): Promise<ReferralFraudQueueItem[]> => {
+    try {
+      const res = await apiClient.get<ReferralFraudQueueItem[]>("/api/v1/me/referrals/fraud-queue", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  approveFraud: async (referralUid: string, programmeUid = "default", note?: string) => {
+    try {
+      const res = await apiClient.post(
+        `/api/v1/me/referrals/fraud-queue/${encodeURIComponent(referralUid)}/approve`,
+        note ? { note } : {},
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  rejectFraud: async (referralUid: string, programmeUid = "default", note?: string) => {
+    try {
+      const res = await apiClient.post(
+        `/api/v1/me/referrals/fraud-queue/${encodeURIComponent(referralUid)}/reject`,
+        note ? { note } : {},
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  overrideFraud: async (referralUid: string, programmeUid = "default", note?: string) => {
+    try {
+      const res = await apiClient.post(
+        `/api/v1/me/referrals/fraud-queue/${encodeURIComponent(referralUid)}/override`,
+        note ? { note } : {},
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getTrends: async (
+    programmeUid = "default",
+    granularity: "DAILY" | "WEEKLY" = "DAILY",
+    days = 30
+  ): Promise<ReferralTrendPoint[]> => {
+    try {
+      const res = await apiClient.get<ReferralTrendPoint[]>("/api/v1/me/referrals/analytics/trends", {
+        params: { programmeUid, granularity, days },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getTopReferrers: async (programmeUid = "default", limit = 10): Promise<ReferralTopReferrer[]> => {
+    try {
+      const res = await apiClient.get<ReferralTopReferrer[]>("/api/v1/me/referrals/analytics/top-referrers", {
+        params: { programmeUid, limit },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getTimeToFirstPurchase: async (programmeUid = "default"): Promise<ReferralTimeToPurchase> => {
+    try {
+      const res = await apiClient.get<ReferralTimeToPurchase>(
+        "/api/v1/me/referrals/analytics/time-to-first-purchase",
+        { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
 export const voucherDenominationApi = {
   getMappings: async (
     catalogRewardUid: string,
