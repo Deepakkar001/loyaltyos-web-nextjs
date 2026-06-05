@@ -50,7 +50,7 @@ export default function CreateCampaignReviewPage() {
           <div>
             <p className="text-sm font-semibold">Review your campaign</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Confirm details below, then save as draft to finish.
+              Confirm details below, then save as draft. Next you will create the CAMPAIGN earn rule for this promo.
             </p>
           </div>
           <Separator />
@@ -80,10 +80,10 @@ export default function CreateCampaignReviewPage() {
             type="button"
             variant="outline"
             className="rounded-full"
-            disabled={saving !== null}
-            onClick={() => submit("draft")}
+            disabled={saving}
+            onClick={() => submit()}
           >
-            {saving === "draft" ? "Saving…" : "Save as draft"}
+            {saving ? "Saving…" : "Save as draft"}
           </Button>
         </div>
 

@@ -16,6 +16,7 @@ import { formatTriggerEventTypesLabel } from "@/lib/campaigns/trigger-event-type
 import type {
   CampaignParticipationResponse,
   CampaignResponse,
+  CampaignSetupStatusResponse,
   CampaignStatsResponse,
 } from "@/types/campaigns";
 
@@ -26,19 +27,22 @@ export default function CampaignDetailPage() {
   const [campaign, setCampaign] = useState<CampaignResponse | null>(null);
   const [stats, setStats] = useState<CampaignStatsResponse | null>(null);
   const [participations, setParticipations] = useState<CampaignParticipationResponse[]>([]);
+  const [setupStatus, setSetupStatus] = useState<CampaignSetupStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, s, p] = await Promise.all([
+      const [c, s, p, setup] = await Promise.all([
         campaignsAdminApi.getCampaign(campaignUid),
         campaignsAdminApi.getStats(campaignUid),
         campaignsAdminApi.listParticipations(campaignUid, 25),
+        campaignsAdminApi.getCampaignSetupStatus(campaignUid),
       ]);
       setCampaign(c);
       setStats(s);
       setParticipations(p);
+      setSetupStatus(setup);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to load campaign");
     } finally {
@@ -77,7 +81,15 @@ export default function CampaignDetailPage() {
 
   const targetedBlocked =
     campaign.customerScope === "TARGETED" && (campaign.customerCount ?? 0) <= 0;
-  const canActivate = campaign.status === "DRAFT" || campaign.status === "PAUSED";
+  const ruleGated = (campaign.executionMode ?? "RULE_GATED") === "RULE_GATED";
+  const showActivateButton = campaign.status === "DRAFT" || campaign.status === "PAUSED";
+  const activateEnabled =
+    showActivateButton &&
+    !targetedBlocked &&
+    (!ruleGated || setupStatus?.canActivateCampaign === true);
+  const activateBlockedReason =
+    setupStatus?.activateBlockReason ??
+    (targetedBlocked ? "Upload a customer list before activating a targeted campaign" : undefined);
   const canEdit = canEditCampaign(campaign.status);
 
   return (
@@ -106,15 +118,11 @@ export default function CampaignDetailPage() {
                 </Button>
               </Link>
             )}
-            {canActivate && (
+            {showActivateButton && (
               <Button
                 className="rounded-full"
-                disabled={targetedBlocked}
-                title={
-                  targetedBlocked
-                    ? "Upload a customer list before activating a targeted campaign"
-                    : undefined
-                }
+                disabled={!activateEnabled}
+                title={!activateEnabled ? activateBlockedReason : undefined}
                 onClick={() => runAction("activate")}
               >
                 Activate
@@ -135,6 +143,58 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {ruleGated && setupStatus ? (
+        <Card className="p-5 border-border/70 bg-[var(--surface-card)] space-y-3">
+          <p className="text-sm font-semibold">Setup checklist</p>
+          <ol className="text-sm space-y-2 list-decimal list-inside text-muted-foreground">
+            <li className={setupStatus.campaignSaved ? "text-foreground" : ""}>
+              Campaign saved ({campaign.status})
+            </li>
+            <li className={setupStatus.campaignRuleCreated ? "text-foreground" : ""}>
+              CAMPAIGN earn rule{" "}
+              {setupStatus.campaignRuleCreated && setupStatus.campaignRuleUid ? (
+                <Link
+                  href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(setupStatus.campaignRuleUid)}/details?programmeUid=${encodeURIComponent(campaign.programmeUid)}`}
+                  className="text-brand-600 hover:underline font-medium"
+                >
+                  created
+                </Link>
+              ) : (
+                <>
+                  not created —{" "}
+                  <Link
+                    href={`/dashboard/campaign-rules/create/campaign?campaignUid=${encodeURIComponent(campaignUid)}&fromCampaignWizard=1`}
+                    className="text-brand-600 hover:underline font-medium"
+                  >
+                    create rule
+                  </Link>
+                </>
+              )}
+            </li>
+            <li className={setupStatus.sandboxPassed ? "text-foreground" : ""}>
+              Sandbox passed
+              {setupStatus.campaignRuleUid && !setupStatus.sandboxPassed ? (
+                <>
+                  {" "}
+                  —{" "}
+                  <Link
+                    href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(setupStatus.campaignRuleUid)}/simulate?programmeUid=${encodeURIComponent(campaign.programmeUid)}`}
+                    className="text-brand-600 hover:underline font-medium"
+                  >
+                    run test
+                  </Link>
+                </>
+              ) : null}
+            </li>
+            <li className={setupStatus.campaignRuleActive ? "text-foreground" : ""}>Rule ACTIVE</li>
+            <li className={campaign.status === "ACTIVE" ? "text-foreground" : ""}>Campaign ACTIVE</li>
+          </ol>
+          {setupStatus.activateBlockReason && campaign.status === "DRAFT" ? (
+            <p className="text-xs text-amber-600">{setupStatus.activateBlockReason}</p>
+          ) : null}
+        </Card>
+      ) : null}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="p-4 border-border/70 bg-[var(--surface-card)]">

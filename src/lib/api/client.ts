@@ -604,6 +604,16 @@ export const loyaltyRulesAdminApi = {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
+  getRuleSandboxStatus: async (ruleUid: string) => {
+    try {
+      const res = await apiClient.get(
+        `/api/v1/engine/rule/admin/rules/${encodeURIComponent(ruleUid)}/sandbox-status`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
   patchStatus: async (ruleUid: string, programmeUid: string, status: RuleStatus): Promise<EarnRuleResponse> => {
     try {
       const res = await apiClient.patch<EarnRuleResponse>(
@@ -636,6 +646,16 @@ export const campaignsAdminApi = {
   }): Promise<CampaignResponse[]> => {
     try {
       const res = await apiClient.get<CampaignResponse[]>("/api/v1/campaigns/admin/campaigns", { params });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getCampaignSetupStatus: async (campaignUid: string) => {
+    try {
+      const res = await apiClient.get(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/setup-status`
+      );
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);

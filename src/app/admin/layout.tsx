@@ -8,6 +8,7 @@ import {
   Building2,
   ClipboardCheck,
   FileText,
+  Headset,
   Layers,
   LogOut,
   Shield,
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Overview", icon: BarChart3 },
   { href: "/admin/tenants", label: "Tenants", icon: Building2 },
   { href: "/admin/approvals", label: "Approvals", icon: ClipboardCheck },
+  { href: "/admin/support", label: "Support Cases", icon: Headset },
   { href: "/admin/industry-suggestions", label: "Industry Suggestions", icon: Layers },
   { href: "/admin/audit", label: "Activity Log", icon: FileText },
 ];

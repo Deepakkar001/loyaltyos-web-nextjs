@@ -46,6 +46,14 @@ export default function IntegrationAuditLogsPage() {
               {log.eventId && <p>Event: {log.eventId}</p>}
               {log.customerId && <p>Customer: {log.customerId}</p>}
               {log.errorMessage && <p className="text-red-600">{log.errorMessage}</p>}
+              {log.httpStatus >= 400 && (
+                <Link
+                  href={`/dashboard/support/contact?prefill=1&category=INTEGRATION&requestId=${encodeURIComponent(log.requestId)}&subject=${encodeURIComponent(`API ${log.httpStatus}: ${log.requestPath}`)}&description=${encodeURIComponent(`${log.errorMessage ?? ""}\n\nRequest: ${log.httpMethod} ${log.requestPath}`)}`}
+                  className="inline-block text-xs text-primary hover:underline mt-1"
+                >
+                  Open support case with this request →
+                </Link>
+              )}
             </div>
           ))
         )}

@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { RuleStatusBadge } from "@/components/loyalty-rules/RuleStatusBadge";
-import { loyaltyRulesAdminApi, onboardingApi } from "@/lib/api/client";
+import { campaignsAdminApi, loyaltyRulesAdminApi, onboardingApi, programmeApiV2 } from "@/lib/api/client";
+import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
 import type { EarnRuleDetailResponse, RuleStatus } from "@/types/rules";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { clearSandboxGate, getSandboxGate } from "@/lib/store/rule-sandbox-gate";
@@ -26,8 +27,11 @@ export default function RuleDetailsPage() {
 
   const ruleUid = params.ruleUid;
   const [rule, setRule] = useState<EarnRuleDetailResponse | null>(null);
+  const [programmeLabel, setProgrammeLabel] = useState(programmeUid);
+  const [campaignLabel, setCampaignLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [serverSandboxPassed, setServerSandboxPassed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -37,6 +41,36 @@ export default function RuleDetailsPage() {
         const r = await loyaltyRulesAdminApi.getRule(ruleUid, programmeUid);
         if (!alive) return;
         setRule(r);
+
+        if (r.ruleType === "CAMPAIGN") {
+          try {
+            const sandbox = await loyaltyRulesAdminApi.getRuleSandboxStatus(ruleUid);
+            if (alive) setServerSandboxPassed(Boolean(sandbox?.sandboxPassed));
+          } catch {
+            if (alive) setServerSandboxPassed(false);
+          }
+        } else if (alive) {
+          setServerSandboxPassed(false);
+        }
+
+        try {
+          const programmes = mergeProgrammeDropdownRows(await programmeApiV2.listProgrammes());
+          const programme = programmes.find((p) => p.programmeUid === (r.programmeUid ?? programmeUid));
+          setProgrammeLabel(programme?.name ?? r.programmeUid ?? programmeUid);
+        } catch {
+          setProgrammeLabel(r.programmeUid ?? programmeUid);
+        }
+
+        if (r.campaignUid) {
+          try {
+            const campaign = await campaignsAdminApi.getCampaign(r.campaignUid);
+            if (alive) setCampaignLabel(campaign.name);
+          } catch {
+            if (alive) setCampaignLabel(null);
+          }
+        } else if (alive) {
+          setCampaignLabel(null);
+        }
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Failed to load rule");
       } finally {
@@ -118,7 +152,9 @@ export default function RuleDetailsPage() {
   }
 
   const canEdit = rule.status === "DRAFT";
-  const canActivate = rule.status === "DRAFT" && Boolean(sandboxGate?.passed);
+  const sandboxPassed =
+    rule.ruleType === "CAMPAIGN" ? serverSandboxPassed : Boolean(sandboxGate?.passed);
+  const canActivate = rule.status === "DRAFT" && sandboxPassed;
 
   return (
     <div className="space-y-6">
@@ -128,7 +164,21 @@ export default function RuleDetailsPage() {
             <RuleStatusBadge status={rule.status} />
             <h1 className="text-2xl font-bold tracking-tight truncate">{rule.name}</h1>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Rule UID: {rule.ruleUid}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {rule.ruleType === "CAMPAIGN" ? "Campaign rule" : "Programme rule"}
+            {" · "}
+            Programme: <span className="font-medium text-foreground">{programmeLabel}</span>
+            {rule.campaignUid ? (
+              <>
+                {" · "}
+                Campaign:{" "}
+                <span className="font-medium text-foreground">
+                  {campaignLabel ?? rule.campaignUid}
+                </span>
+              </>
+            ) : null}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5 font-mono">Rule UID: {rule.ruleUid}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(rule.ruleUid)}/change-history?programmeUid=${encodeURIComponent(programmeUid)}`}>
@@ -200,6 +250,24 @@ export default function RuleDetailsPage() {
         <Separator />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">Programme</p>
+            <p className="font-medium">{programmeLabel}</p>
+            <p className="text-[11px] font-mono text-muted-foreground">{rule.programmeUid}</p>
+          </div>
+          {rule.campaignUid ? (
+            <div>
+              <p className="text-xs text-muted-foreground">Campaign</p>
+              <p className="font-medium">{campaignLabel ?? rule.campaignUid}</p>
+              {campaignLabel ? (
+                <p className="text-[11px] font-mono text-muted-foreground">{rule.campaignUid}</p>
+              ) : null}
+            </div>
+          ) : null}
+          <div>
+            <p className="text-xs text-muted-foreground">Rule type</p>
+            <p className="font-medium">{rule.ruleType ?? "PROGRAMME"}</p>
+          </div>
           <div>
             <p className="text-xs text-muted-foreground">Trigger Event Type</p>
             <p className="font-medium">{rule.triggerEventType}</p>

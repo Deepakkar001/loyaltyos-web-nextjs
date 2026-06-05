@@ -12,6 +12,7 @@ import {
   PendingAgreementListItem,
 } from "@/types/onboarding";
 import { getApiBaseUrl } from "@/lib/api/get-api-base-url";
+import type { SupportCase, SupportCaseStatus } from "@/lib/api/support";
 
 const adminClient = axios.create({
   baseURL: getApiBaseUrl(),
@@ -240,6 +241,43 @@ export const adminApi = {
     try {
       const res: AxiosResponse<AdminBusinessCategoryItem> = await adminClient.post(
         `/api/v1/admin/business-categories/${encodeURIComponent(code)}/reactivate`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  listSupportCases: async (status?: SupportCaseStatus): Promise<SupportCase[]> => {
+    try {
+      const res = await adminClient.get<SupportCase[]>("/api/v1/admin/support/cases", {
+        params: status ? { status } : {},
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  getSupportCase: async (caseUid: string): Promise<SupportCase> => {
+    try {
+      const res = await adminClient.get<SupportCase>(
+        `/api/v1/admin/support/cases/${encodeURIComponent(caseUid)}`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  updateSupportCaseStatus: async (
+    caseUid: string,
+    status: SupportCaseStatus
+  ): Promise<SupportCase> => {
+    try {
+      const res = await adminClient.patch<SupportCase>(
+        `/api/v1/admin/support/cases/${encodeURIComponent(caseUid)}/status`,
+        { status }
       );
       return res.data;
     } catch (err) {

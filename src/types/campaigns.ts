@@ -1,5 +1,7 @@
 export type CampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "EXHAUSTED" | "EXPIRED" | "ENDED";
 
+export type CampaignExecutionMode = "RULE_GATED" | "LEGACY_OFFER";
+
 export type CustomerScope = "ALL" | "TARGETED";
 
 export type StackMode = "ADDITIVE" | "BEST_OFFER" | "FIRST_MATCH";
@@ -87,6 +89,31 @@ export interface CampaignResponse {
   budgetExceedsApprovalThreshold?: boolean;
   customerScope?: CustomerScope;
   customerCount?: number;
+  executionMode?: CampaignExecutionMode;
+}
+
+export interface RuleSandboxStatusResponse {
+  tenantId: string;
+  ruleUid: string;
+  campaignUid?: string;
+  sandboxPassed: boolean;
+  targetedCustomerOk?: boolean;
+  customerId?: string;
+  passedAt?: string;
+}
+
+export interface CampaignSetupStatusResponse {
+  campaignUid: string;
+  campaignStatus: CampaignStatus;
+  executionMode?: CampaignExecutionMode;
+  campaignSaved: boolean;
+  campaignRuleCreated: boolean;
+  campaignRuleUid?: string;
+  campaignRuleActive: boolean;
+  sandboxPassed: boolean;
+  sandboxPassedAt?: string;
+  canActivateCampaign: boolean;
+  activateBlockReason?: string;
 }
 
 export interface CampaignTargetUploadColumnSpec {

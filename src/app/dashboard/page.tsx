@@ -183,7 +183,11 @@ function DashboardHomeContent() {
             <Button
               variant="outline"
               className="border-0 rounded-full bg-[var(--surface-sunken)]"
-              onClick={() => router.push("/dashboard/support/contact")}
+              onClick={() =>
+                router.push(
+                  `/dashboard/support/contact?prefill=1&category=OTHER&priority=URGENT&subject=${encodeURIComponent("Dashboard failed to load")}&description=${encodeURIComponent(`Error: ${error ?? "unknown"}`)}&source=dashboard`
+                )
+              }
             >
               Contact Support
             </Button>

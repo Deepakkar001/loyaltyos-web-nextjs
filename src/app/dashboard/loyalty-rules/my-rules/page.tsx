@@ -18,7 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { programmeApiV2, loyaltyRulesAdminApi, ApiError, ensureAuthSession } from "@/lib/api/client";
+import {
+  campaignsAdminApi,
+  programmeApiV2,
+  loyaltyRulesAdminApi,
+  ApiError,
+  ensureAuthSession,
+} from "@/lib/api/client";
 import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
 import { loadTenantRulesForList } from "@/lib/rules/load-tenant-rules";
 import type { EarnRuleResponse, RuleStatus, RuleType } from "@/types/rules";
@@ -48,6 +54,7 @@ export default function MyRulesPage() {
   const [ruleTypeFilter, setRuleTypeFilter] = useState<RuleType | "ALL">(initialRuleType);
   const [programmeFilter, setProgrammeFilter] = useState<string>("ALL");
   const [programmes, setProgrammes] = useState<Array<{ programmeUid: string; name: string }>>([]);
+  const [campaigns, setCampaigns] = useState<Array<{ campaignUid: string; name: string }>>([]);
   const [removeTarget, setRemoveTarget] = useState<EarnRuleResponse | null>(null);
   const [removing, setRemoving] = useState(false);
 
@@ -58,8 +65,17 @@ export default function MyRulesPage() {
   useEffect(() => {
     (async () => {
       try {
-        const list = await programmeApiV2.listProgrammes();
-        setProgrammes(mergeProgrammeDropdownRows(list));
+        const [programmeList, campaignList] = await Promise.all([
+          programmeApiV2.listProgrammes(),
+          campaignsAdminApi.listCampaigns().catch(() => []),
+        ]);
+        setProgrammes(mergeProgrammeDropdownRows(programmeList));
+        setCampaigns(
+          campaignList.map((c) => ({
+            campaignUid: c.campaignUid,
+            name: c.name,
+          }))
+        );
       } catch {
         /* programme filter optional */
       }
@@ -105,6 +121,14 @@ export default function MyRulesPage() {
     return map;
   }, [programmes]);
 
+  const campaignLabelByUid = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of campaigns) {
+      map.set(c.campaignUid, c.name);
+    }
+    return map;
+  }, [campaigns]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rules.filter((r) => {
@@ -114,13 +138,21 @@ export default function MyRulesPage() {
         return false;
       }
       if (!q) return true;
+      const programmeLabel = programmeLabelByUid.get(r.programmeUid) ?? r.programmeUid;
+      const campaignLabel = r.campaignUid
+        ? (campaignLabelByUid.get(r.campaignUid) ?? r.campaignUid)
+        : "";
       return (
         r.name.toLowerCase().includes(q) ||
         r.ruleUid.toLowerCase().includes(q) ||
-        r.triggerEventType.toLowerCase().includes(q)
+        r.triggerEventType.toLowerCase().includes(q) ||
+        programmeLabel.toLowerCase().includes(q) ||
+        r.programmeUid.toLowerCase().includes(q) ||
+        campaignLabel.toLowerCase().includes(q) ||
+        (r.campaignUid?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [rules, query, status]);
+  }, [rules, query, status, programmeLabelByUid, campaignLabelByUid]);
 
   const confirmRemoveRule = useCallback(async () => {
     if (!removeTarget) return;
@@ -191,7 +223,7 @@ export default function MyRulesPage() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, UID, or event type…"
+            placeholder="Search by rule, programme, campaign, or event…"
           />
         </div>
         <NativeSelect
@@ -237,6 +269,11 @@ export default function MyRulesPage() {
               key={r.ruleUid}
               rule={r}
               programmeLabel={programmeLabelByUid.get(r.programmeUid) ?? r.programmeUid}
+              campaignLabel={
+                r.campaignUid
+                  ? (campaignLabelByUid.get(r.campaignUid) ?? r.campaignUid)
+                  : undefined
+              }
               onRemove={() => setRemoveTarget(r)}
             />
           ))}
@@ -253,10 +290,12 @@ export default function MyRulesPage() {
 function RuleListCard({
   rule,
   programmeLabel,
+  campaignLabel,
   onRemove,
 }: {
   rule: EarnRuleResponse;
   programmeLabel: string;
+  campaignLabel?: string;
   onRemove: () => void;
 }) {
   const detailsHref = `/dashboard/loyalty-rules/my-rules/${encodeURIComponent(rule.ruleUid)}/details?programmeUid=${encodeURIComponent(rule.programmeUid)}`;
@@ -272,6 +311,23 @@ function RuleListCard({
             </span>
             <p className="text-sm font-semibold leading-snug">{rule.name}</p>
           </div>
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              Programme:{" "}
+              <span className="font-medium text-foreground">{programmeLabel}</span>
+            </span>
+            {rule.campaignUid && campaignLabel ? (
+              <>
+                <span aria-hidden className="text-border">
+                  ·
+                </span>
+                <span>
+                  Campaign:{" "}
+                  <span className="font-medium text-foreground">{campaignLabel}</span>
+                </span>
+              </>
+            ) : null}
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:justify-end">
           <Link href={detailsHref}>
@@ -295,11 +351,18 @@ function RuleListCard({
       </div>
 
       <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
-        <RuleMetaItem label="Programme" value={programmeLabel} />
+        <RuleMetaItem label="Programme" value={programmeLabel} subValue={rule.programmeUid} mono />
+        {rule.campaignUid ? (
+          <RuleMetaItem
+            label="Campaign"
+            value={campaignLabel ?? rule.campaignUid}
+            subValue={campaignLabel ? rule.campaignUid : undefined}
+            mono={Boolean(campaignLabel)}
+          />
+        ) : null}
         <RuleMetaItem label="Event" value={rule.triggerEventType} />
         <RuleMetaItem label="Execution" value={rule.executionMode} />
         <RuleMetaItem label="Rule UID" value={rule.ruleUid} mono />
-        {rule.campaignUid ? <RuleMetaItem label="Campaign" value={rule.campaignUid} mono /> : null}
       </dl>
     </Card>
   );
@@ -308,20 +371,29 @@ function RuleListCard({
 function RuleMetaItem({
   label,
   value,
+  subValue,
   mono = false,
 }: {
   label: string;
   value: string;
+  subValue?: string;
   mono?: boolean;
 }) {
   return (
     <div className="min-w-0">
       <dt className="font-medium text-foreground/70">{label}</dt>
-      <dd
-        className={`truncate ${mono ? "font-mono text-[11px]" : ""}`}
-        title={value}
-      >
-        {value}
+      <dd className="min-w-0">
+        <p
+          className={`truncate ${mono ? "font-mono text-[11px]" : ""}`}
+          title={value}
+        >
+          {value}
+        </p>
+        {subValue ? (
+          <p className="truncate font-mono text-[10px] text-muted-foreground/80" title={subValue}>
+            {subValue}
+          </p>
+        ) : null}
       </dd>
     </div>
   );

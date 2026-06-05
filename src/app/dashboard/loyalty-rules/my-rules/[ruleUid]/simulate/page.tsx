@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { integrationApi, loyaltyRulesAdminApi } from "@/lib/api/client";
+import { campaignsAdminApi, integrationApi, loyaltyRulesAdminApi } from "@/lib/api/client";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { markSandboxPassed } from "@/lib/store/rule-sandbox-gate";
 import {
@@ -64,6 +64,11 @@ type SandboxValidateResponse = {
   tenantId?: string;
   payload?: unknown;
   schemaPresent?: boolean;
+  schemaSource?: string;
+  sandboxPassed?: boolean;
+  targetedCustomerOk?: boolean;
+  targetedErrorCode?: string;
+  targetedErrorMessage?: string;
   ruleEvaluation?: RuleEval;
   ruleEvaluationError?: string;
 };
@@ -91,6 +96,7 @@ export default function RuleSimulatePage() {
   const tenantId = useOnboardingStore((s) => s.tenantId) ?? "";
 
   const [campaignUid, setCampaignUid] = useState<string | undefined>(undefined);
+  const [targetedSampleCustomers, setTargetedSampleCustomers] = useState<string[]>([]);
 
   const [customerId, setCustomerId] = useState("cust_123");
   const [amount, setAmount] = useState("500");
@@ -121,7 +127,25 @@ export default function RuleSimulatePage() {
         if (rule.triggerEventType) {
           setEventType(rule.triggerEventType);
         }
-        setCampaignUid(rule.campaignUid?.trim() || undefined);
+        const uid = rule.campaignUid?.trim() || undefined;
+        setCampaignUid(uid);
+        if (uid && rule.ruleType === "CAMPAIGN") {
+          try {
+            const campaign = await campaignsAdminApi.getCampaign(uid);
+            if (!cancelled && campaign.customerScope === "TARGETED") {
+              const page = await campaignsAdminApi.listTargetCustomers(uid, { size: 20 });
+              if (!cancelled) {
+                setTargetedSampleCustomers(
+                  page.content.map((r) => r.customerId).filter((id): id is string => Boolean(id))
+                );
+              }
+            } else if (!cancelled) {
+              setTargetedSampleCustomers([]);
+            }
+          } catch {
+            if (!cancelled) setTargetedSampleCustomers([]);
+          }
+        }
       } catch {
         /* non-blocking */
       }
@@ -213,7 +237,11 @@ export default function RuleSimulatePage() {
 
       const ruleEval = res.ruleEvaluation;
       const matchedRules = Array.isArray(ruleEval?.matchedRules) ? ruleEval.matchedRules : [];
-      const didMatch = matchedRules.some((m) => String(m?.ruleUid ?? "") === ruleUid);
+      const didMatch =
+        res.sandboxPassed === true ||
+        (res.sandboxPassed === undefined &&
+          matchedRules.some((m) => String(m?.ruleUid ?? "") === ruleUid) &&
+          res.targetedCustomerOk !== false);
       const finalPoints = typeof ruleEval?.finalPointsAwarded === "number" ? ruleEval.finalPointsAwarded : undefined;
 
       const gateTxnId = readTransactionIdFromPayloadJson(
@@ -233,6 +261,7 @@ export default function RuleSimulatePage() {
         toast("Rule matched. Sign in to record the sandbox pass for activation.");
       } else if (!didMatch) {
         const hint =
+          res.targetedErrorMessage ??
           res.ruleEvaluationError ??
           (ruleEval?.message === "No match"
             ? "Rule evaluated but conditions did not match. Use the exact field names and values from your rule (e.g. event.Channel vs event.channel — case-sensitive)."
@@ -403,7 +432,27 @@ export default function RuleSimulatePage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <>
+              {targetedSampleCustomers.length > 0 ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-2">
+                  <p className="text-sm font-medium">Targeted campaign audience</p>
+                  <p className="text-xs text-muted-foreground">
+                    Sandbox requires a customer from the uploaded list. Pick a sample ID (read-only helper):
+                  </p>
+                  <NativeSelect
+                    ariaLabel="Sample targeted customer"
+                    value={customerId}
+                    onChange={setCustomerId}
+                    options={[
+                      { value: customerId, label: customerId || "Select customer…" },
+                      ...targetedSampleCustomers
+                        .filter((id) => id !== customerId)
+                        .map((id) => ({ value: id, label: id })),
+                    ]}
+                  />
+                </div>
+              ) : null}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground" htmlFor="customerId">
                   Customer ID
@@ -442,6 +491,7 @@ export default function RuleSimulatePage() {
                 <Input id="transactionId" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} />
               </div>
             </div>
+            </>
           )}
 
           <div className="space-y-2">

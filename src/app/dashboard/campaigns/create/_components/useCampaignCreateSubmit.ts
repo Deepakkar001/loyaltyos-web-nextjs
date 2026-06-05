@@ -16,9 +16,9 @@ import { buildEventSchemaJsonNode } from "@/lib/programme/event-schema-merge";
 export function useCampaignCreateSubmit() {
   const router = useRouter();
   const { form, eventSchemaDraft, clearDraft } = useCampaignForm();
-  const [saving, setSaving] = useState<"draft" | "activate" | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const submit = async (action: "draft" | "activate") => {
+  const submit = async () => {
     const built = buildCampaignUpsertPayload(form, {});
     if (!built.ok) {
       toast.error(built.error);
@@ -49,7 +49,7 @@ export function useCampaignCreateSubmit() {
       }
     }
 
-    setSaving(action);
+    setSaving(true);
     try {
       const draftUid = form.draftCampaignUid?.trim();
       const saved = draftUid
@@ -72,31 +72,26 @@ export function useCampaignCreateSubmit() {
             `Campaign saved but event schema was not saved: ${msg}. Update it under Event Schema.`
           );
           clearDraft();
-          router.push(`/dashboard/campaigns/${encodeURIComponent(saved.campaignUid)}`);
+          router.push(
+            `/dashboard/campaign-rules/create/campaign?campaignUid=${encodeURIComponent(saved.campaignUid)}&fromCampaignWizard=1`
+          );
           return;
         }
       }
 
-      if (action === "activate") {
-        await campaignsAdminApi.activateCampaign(saved.campaignUid);
-        toast.success(
-          campaignCreateHasEventSchemaContent(eventSchemaDraft)
-            ? "Campaign saved with event schema and activated"
-            : "Campaign saved and activated"
-        );
-      } else {
-        toast.success(
-          campaignCreateHasEventSchemaContent(eventSchemaDraft)
-            ? "Campaign saved as draft with event schema"
-            : "Campaign saved as draft"
-        );
-      }
+      toast.success(
+        campaignCreateHasEventSchemaContent(eventSchemaDraft)
+          ? "Campaign saved as draft with event schema. Next: create the earn rule."
+          : "Campaign saved as draft. Next: create the earn rule."
+      );
       clearDraft();
-      router.push(`/dashboard/campaigns/${encodeURIComponent(saved.campaignUid)}`);
+      router.push(
+        `/dashboard/campaign-rules/create/campaign?campaignUid=${encodeURIComponent(saved.campaignUid)}&fromCampaignWizard=1`
+      );
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save campaign");
     } finally {
-      setSaving(null);
+      setSaving(false);
     }
   };
 

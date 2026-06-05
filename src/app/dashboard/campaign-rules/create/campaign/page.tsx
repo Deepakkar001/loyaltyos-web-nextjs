@@ -6,7 +6,8 @@ import toast from "react-hot-toast";
 
 import { CreateRuleShell } from "@/app/dashboard/loyalty-rules/create/_components/CreateRuleShell";
 import { stepHref, useRuleCreateFlow } from "@/app/dashboard/loyalty-rules/create/_components/rule-create-flow";
-import { campaignsAdminApi } from "@/lib/api/client";
+import { campaignsAdminApi, loyaltyRulesAdminApi } from "@/lib/api/client";
+import { formatCustomerScopeLabel } from "@/lib/campaigns/campaign-form";
 import {
   formatTriggerEventTypesLabel,
   parseTriggerEventTypes,
@@ -50,14 +51,30 @@ export default function CreateCampaignRuleCampaignPage() {
     (async () => {
       setLoading(true);
       try {
-        const list = await campaignsAdminApi.listCampaigns();
+        const [list, campaignRules] = await Promise.all([
+          campaignsAdminApi.listCampaigns(),
+          loyaltyRulesAdminApi.listRules("default", "CAMPAIGN"),
+        ]);
+        const activeRuleCampaignUids = new Set(
+          campaignRules
+            .filter((r) => r.status === "ACTIVE" && r.campaignUid)
+            .map((r) => r.campaignUid as string)
+        );
+        const eligible = list.filter(
+          (c) =>
+            (c.status === "DRAFT" || c.status === "ACTIVE") &&
+            !activeRuleCampaignUids.has(c.campaignUid)
+        );
         if (!alive) return;
-        setCampaigns(list);
+        setCampaigns(eligible);
+        const queryUid = search.get("campaignUid")?.trim();
         const draft = tenantId ? loadRuleDraft(tenantId, "campaign") : null;
-        if (draft?.campaignUid && list.some((c) => c.campaignUid === draft.campaignUid)) {
+        if (queryUid && eligible.some((c) => c.campaignUid === queryUid)) {
+          setSelectedUid(queryUid);
+        } else if (draft?.campaignUid && eligible.some((c) => c.campaignUid === draft.campaignUid)) {
           setSelectedUid(draft.campaignUid);
-        } else if (list.length === 1) {
-          setSelectedUid(list[0].campaignUid);
+        } else if (eligible.length === 1) {
+          setSelectedUid(eligible[0].campaignUid);
         }
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Failed to load campaigns");
@@ -68,7 +85,7 @@ export default function CreateCampaignRuleCampaignPage() {
     return () => {
       alive = false;
     };
-  }, [tenantId]);
+  }, [tenantId, search]);
 
   const selected = campaigns.find((c) => c.campaignUid === selectedUid);
   const configuredEvents = selected ? parseTriggerEventTypes(selected.triggerEventType) : [];
@@ -111,9 +128,14 @@ export default function CreateCampaignRuleCampaignPage() {
     <CreateRuleShell title="Campaigns">
       <Card className="p-6 border-border/70 bg-[var(--surface-card)] space-y-5">
         <p className="text-sm text-muted-foreground">
-          Step 1 — Choose the campaign. On the next step you will pick a trigger event type from the
-          campaign or programme schema, then configure the earn rule.
+          Step 1 — Choose the campaign (draft or active promos only). On the next step you will pick a
+          trigger event type from the campaign or programme schema, then configure the earn rule.
         </p>
+        {search.get("fromCampaignWizard") === "1" ? (
+          <p className="text-sm text-brand-600 font-medium">
+            Campaign saved. Select it below (pre-selected when available) to create its earn rule.
+          </p>
+        ) : null}
 
         {loading ? (
           <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
@@ -138,7 +160,7 @@ export default function CreateCampaignRuleCampaignPage() {
                   { value: "", label: "Select a campaign…" },
                   ...campaigns.map((c) => ({
                     value: c.campaignUid,
-                    label: `${c.name} (${c.status})`,
+                    label: `${c.name} · ${c.programmeUid} · ${formatCustomerScopeLabel(c.customerScope, c.customerCount)} (${c.status})`,
                   })),
                 ]}
               />
@@ -148,6 +170,12 @@ export default function CreateCampaignRuleCampaignPage() {
                 <p>
                   <span className="text-muted-foreground">Programme:</span>{" "}
                   <span className="font-medium">{selected.programmeUid}</span>
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Audience:</span>{" "}
+                  <span className="font-medium">
+                    {formatCustomerScopeLabel(selected.customerScope, selected.customerCount)}
+                  </span>
                 </p>
                 <p>
                   <span className="text-muted-foreground">Event types on campaign (if any):</span>{" "}
