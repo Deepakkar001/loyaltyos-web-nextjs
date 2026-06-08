@@ -105,11 +105,19 @@ export function CampaignTargetAudiencePanel({
       await ensureAuthSession();
       const res = await campaignsAdminApi.uploadTargetCustomers(campaignUid, file);
       setLastUpload(res);
-      toast.success(
-        `Import complete: ${res.importedCount ?? 0} customer(s) added` +
-          (res.duplicateCount ? `, ${res.duplicateCount} duplicate(s) skipped` : "") +
-          (res.errorCount ? `, ${res.errorCount} row error(s)` : "")
-      );
+      if (res.duplicateFileReplay) {
+        toast("Same file data as before — no changes were made.", { icon: "ℹ️" });
+      } else if ((res.importedCount ?? 0) === 0 && (res.duplicateCount ?? 0) > 0) {
+        toast("No new customers added — all IDs in this file are already on the list.", {
+          icon: "ℹ️",
+        });
+      } else {
+        toast.success(
+          `Import complete: ${res.importedCount ?? 0} customer(s) added` +
+            (res.duplicateCount ? `, ${res.duplicateCount} duplicate(s) skipped` : "") +
+            (res.errorCount ? `, ${res.errorCount} row error(s)` : "")
+        );
+      }
       await Promise.all([loadCustomers(), loadUploads()]);
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
@@ -253,6 +261,7 @@ export function CampaignTargetAudiencePanel({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-[var(--surface-sunken)] text-left text-xs text-muted-foreground">
+              <th className="px-3 py-2 font-medium w-14">Sl No</th>
               <th className="px-3 py-2 font-medium">Customer ID</th>
               <th className="px-3 py-2 font-medium">Added</th>
               <th className="px-3 py-2 font-medium text-right">Action</th>
@@ -261,13 +270,16 @@ export function CampaignTargetAudiencePanel({
           <tbody>
             {customers.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground text-xs">
+                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground text-xs">
                   {loadingList ? "Loading…" : "No targeted customers yet. Upload a CSV to add IDs."}
                 </td>
               </tr>
             ) : (
-              customers.map((row) => (
+              customers.map((row, index) => (
                 <tr key={row.customerId} className="border-b border-border/60 last:border-0">
+                  <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground">
+                    {page * pageSize + index + 1}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs">{row.customerId}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {row.addedAt ? new Date(row.addedAt).toLocaleString() : "—"}
@@ -323,19 +335,32 @@ export function CampaignTargetAudiencePanel({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-[var(--surface-sunken)] text-left text-xs text-muted-foreground">
+                  <th className="px-3 py-2 font-medium w-14">Sl No</th>
                   <th className="px-3 py-2 font-medium">File</th>
-                  <th className="px-3 py-2 font-medium">Imported</th>
-                  <th className="px-3 py-2 font-medium">Dupes</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Imported customers</th>
+                  <th className="px-3 py-2 font-medium">Duplicates skipped</th>
+                  <th className="px-3 py-2 font-medium">Uploaded Status</th>
+                  <th className="px-3 py-2 font-medium">Uploaded by</th>
+                  <th className="px-3 py-2 font-medium">Uploaded at</th>
                 </tr>
               </thead>
               <tbody>
-                {uploads.map((u) => (
+                {uploads.map((u, index) => (
                   <tr key={u.uploadUid} className="border-b border-border/60 last:border-0">
+                    <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground">{index + 1}</td>
                     <td className="px-3 py-2 font-mono text-xs">{u.uploadUid?.slice(0, 8)}…</td>
                     <td className="px-3 py-2 tabular-nums">{u.importedCount ?? 0}</td>
                     <td className="px-3 py-2 tabular-nums">{u.duplicateCount ?? 0}</td>
                     <td className="px-3 py-2">{u.status}</td>
+                    <td
+                      className="px-3 py-2 font-mono text-xs text-muted-foreground max-w-[220px] truncate"
+                      title={u.tenantId ?? u.uploadedBy}
+                    >
+                      {u.tenantId ?? u.uploadedBy ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                      {u.uploadedAt ? new Date(u.uploadedAt).toLocaleString() : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

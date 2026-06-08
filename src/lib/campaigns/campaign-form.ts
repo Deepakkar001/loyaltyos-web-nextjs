@@ -22,8 +22,6 @@ export {
   parseTriggerEventTypes,
 } from "@/lib/campaigns/trigger-event-types";
 
-export const CAMPAIGN_APPROVAL_BUDGET_THRESHOLD = 100_000;
-
 export const CAMPAIGN_FIELD_PLACEHOLDERS = {
   name: "e.g. Winter Sale 2026",
   description: "Internal notes or customer-facing copy",

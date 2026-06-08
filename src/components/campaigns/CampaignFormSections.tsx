@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, type ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
 
 import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
-import {
-  CAMPAIGN_APPROVAL_BUDGET_THRESHOLD,
-  CAMPAIGN_FIELD_PLACEHOLDERS as P,
-} from "@/lib/campaigns/campaign-form";
+import { CAMPAIGN_FIELD_PLACEHOLDERS as P } from "@/lib/campaigns/campaign-form";
 import { useProgrammeDropdown } from "@/lib/programme/use-programme-dropdown";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { Card } from "@/components/ui/card";
@@ -34,24 +30,6 @@ function SectionCard({
       </div>
       {children}
     </Card>
-  );
-}
-
-function BudgetApprovalBanner({ budgetTotal }: { budgetTotal: string }) {
-  const amount = Number(budgetTotal);
-  if (!Number.isFinite(amount) || amount <= CAMPAIGN_APPROVAL_BUDGET_THRESHOLD) return null;
-  return (
-    <div
-      role="alert"
-      className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
-    >
-      <AlertTriangle className="size-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
-      <p>
-        Total budget exceeds the approval threshold (
-        {CAMPAIGN_APPROVAL_BUDGET_THRESHOLD.toLocaleString()}). This campaign may require additional
-        approval before activation.
-      </p>
-    </div>
   );
 }
 
@@ -169,7 +147,6 @@ export function CampaignBudgetSection() {
 
   return (
     <SectionCard title="Budget">
-      <BudgetApprovalBanner budgetTotal={form.budgetTotal} />
       <div className="space-y-2">
         <Label htmlFor="budget-total">Total budget</Label>
         <Input

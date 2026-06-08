@@ -144,9 +144,13 @@ export interface CampaignTargetUploadResponse {
   duplicateCount?: number;
   errorCount?: number;
   errorReport?: Array<{ row: number; customerId: string; reason: string }>;
+  tenantId?: string;
+  uploadedBy?: string;
   uploadedAt?: string;
   completedAt?: string;
   errorMessage?: string;
+  /** Same CSV file (content hash) already uploaded for this campaign. */
+  duplicateFileReplay?: boolean;
 }
 
 export interface CampaignTargetCustomerResponse {

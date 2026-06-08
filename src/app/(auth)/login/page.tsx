@@ -47,7 +47,7 @@ export default function LoginPage() {
       setRegistrationData({ email: res.email });
       syncStatusFromBackend(res.onboardingStatus);
 
-      toast.success("Welcome back.");
+      toast.success(`Welcome back, ${res.email.split("@")[0].charAt(0).toUpperCase() + res.email.split("@")[0].slice(1)}!`);
       // Route immediately to the right destination to avoid showing onboarding steps briefly.
       // Guided Setup Progress routing:
       // AGREEMENT_SIGNED → Configure
