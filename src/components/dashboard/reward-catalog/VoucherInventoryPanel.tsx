@@ -75,12 +75,15 @@ export function VoucherInventoryPanel({
   const loadBatches = useCallback(async () => {
     try {
       await ensureAuthSession();
-      const list = await voucherApi.listBatches();
+      const list = await voucherApi.listBatches({
+        programmeUid,
+        catalogRewardUid: catalogRewardUid || undefined,
+      });
       setBatches(list);
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
     }
-  }, []);
+  }, [programmeUid, catalogRewardUid]);
 
   useEffect(() => {
     void loadStock();

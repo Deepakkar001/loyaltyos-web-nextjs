@@ -9,6 +9,8 @@ import {
   ProgrammeSummaryResponse,
   ProgrammeStatusPatchRequest,
   ProgrammeConfigBlobResponse,
+  RewardCatalogRecoveryResponse,
+  PortalRewardCatalogResponse,
   UpsertProgrammeConfigRequest,
   RegisterTenantRequest,
   SubmitAgreementRequest,
@@ -154,6 +156,17 @@ export class ApiError extends Error {
     this.fieldErrors = response.fieldErrors;
   }
 }
+
+export type EventDefinitionApiPayload = {
+  eventType: string;
+  coreFields: Array<{ name: string; type: string; required: boolean }>;
+};
+
+export type EventSchemaSettingsApiPayload = {
+  version?: number;
+  backwardCompatibilityDays?: number;
+  customFields?: Array<Record<string, unknown>>;
+};
 
 /** Reads message from standard ErrorResponse or voucher upload error bodies. */
 function messageFromResponseData(data: unknown): string | undefined {
@@ -454,6 +467,36 @@ export const programmeApiV2 = {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
+  previewRewardCatalogRecovery: async (programmeUid: string): Promise<RewardCatalogRecoveryResponse> => {
+    try {
+      const res = await apiClient.get<RewardCatalogRecoveryResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/config/reward-catalog/recovery`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  restoreRewardCatalog: async (programmeUid: string): Promise<ProgrammeConfigBlobResponse> => {
+    try {
+      const res = await apiClient.post<ProgrammeConfigBlobResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/config/reward-catalog/restore`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getMergedRewardCatalog: async (programmeUid: string): Promise<PortalRewardCatalogResponse> => {
+    try {
+      const res = await apiClient.get<PortalRewardCatalogResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/reward-catalog`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
   upsertProgrammeConfig: async (
     programmeUid: string,
     data: UpsertProgrammeConfigRequest
@@ -462,6 +505,62 @@ export const programmeApiV2 = {
       const res = await apiClient.put<ProgrammeConfigBlobResponse>(
         `/api/v2/programmes/${programmeUid}/config`,
         data
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  patchProgrammeEventDefinition: async (
+    programmeUid: string,
+    eventType: string,
+    body: EventDefinitionApiPayload
+  ): Promise<ProgrammeConfigBlobResponse> => {
+    try {
+      const res = await apiClient.patch<ProgrammeConfigBlobResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/config/event-schema/events/${encodeURIComponent(eventType)}`,
+        body
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  addProgrammeEventDefinition: async (
+    programmeUid: string,
+    body: EventDefinitionApiPayload
+  ): Promise<ProgrammeConfigBlobResponse> => {
+    try {
+      const res = await apiClient.post<ProgrammeConfigBlobResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/config/event-schema/events`,
+        body
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  removeProgrammeEventDefinition: async (
+    programmeUid: string,
+    eventType: string
+  ): Promise<ProgrammeConfigBlobResponse> => {
+    try {
+      const res = await apiClient.delete<ProgrammeConfigBlobResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/config/event-schema/events/${encodeURIComponent(eventType)}`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  patchProgrammeEventSchemaSettings: async (
+    programmeUid: string,
+    body: EventSchemaSettingsApiPayload
+  ): Promise<ProgrammeConfigBlobResponse> => {
+    try {
+      const res = await apiClient.patch<ProgrammeConfigBlobResponse>(
+        `/api/v2/programmes/${encodeURIComponent(programmeUid)}/config/event-schema/settings`,
+        body
       );
       return res.data;
     } catch (err) {
@@ -689,6 +788,62 @@ export const campaignsAdminApi = {
       const res = await apiClient.put<CampaignResponse>(
         `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/event-schema`,
         payload
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  patchCampaignEventDefinition: async (
+    campaignUid: string,
+    eventType: string,
+    body: EventDefinitionApiPayload
+  ): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.patch<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/event-schema/events/${encodeURIComponent(eventType)}`,
+        body
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  addCampaignEventDefinition: async (
+    campaignUid: string,
+    body: EventDefinitionApiPayload
+  ): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.post<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/event-schema/events`,
+        body
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  removeCampaignEventDefinition: async (
+    campaignUid: string,
+    eventType: string
+  ): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.delete<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/event-schema/events/${encodeURIComponent(eventType)}`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  patchCampaignEventSchemaSettings: async (
+    campaignUid: string,
+    body: EventSchemaSettingsApiPayload
+  ): Promise<CampaignResponse> => {
+    try {
+      const res = await apiClient.patch<CampaignResponse>(
+        `/api/v1/campaigns/admin/campaigns/${encodeURIComponent(campaignUid)}/event-schema/settings`,
+        body
       );
       return res.data;
     } catch (err) {
@@ -1013,9 +1168,17 @@ export const voucherApi = {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
-  listBatches: async (): Promise<VoucherBatchListItem[]> => {
+  listBatches: async (params?: {
+    programmeUid?: string;
+    catalogRewardUid?: string;
+  }): Promise<VoucherBatchListItem[]> => {
     try {
-      const res = await apiClient.get<VoucherBatchListItem[]>("/api/v1/me/vouchers/batches");
+      const res = await apiClient.get<VoucherBatchListItem[]>("/api/v1/me/vouchers/batches", {
+        params: {
+          programmeUid: params?.programmeUid,
+          catalogRewardUid: params?.catalogRewardUid,
+        },
+      });
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);

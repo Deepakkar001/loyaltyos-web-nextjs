@@ -1,39 +1,54 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Pencil } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { campaignsAdminApi, programmeApiV2, ApiError, ensureAuthSession } from "@/lib/api/client";
 import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
 import {
+  buildEventDefinitionPayload,
   buildEventSchemaJsonNode,
+  buildEventSchemaSettingsPayload,
   defaultEventSchemaDraft,
   eventSchemaDraftFromCampaign,
   eventSchemaDraftFromConfigRoot,
   isLikelyCompleteProgrammeConfig,
-  mergeEventSchemaIntoProgrammeConfig,
+  type EventSchemaDefinitionDraft,
   type EventSchemaDraft,
 } from "@/lib/programme/event-schema-merge";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import type { CampaignResponse } from "@/types/campaigns";
 import { cn } from "@/lib/utils";
 
-import { EventSchemaEditorForm, ReadOnlyEventSchema } from "./EventSchemaEditor";
+import {
+  EventDefinitionEditCard,
+  ReadOnlyEventSchema,
+  SchemaSettingsEditCard,
+  eventKeysEqual,
+} from "./EventSchemaEditor";
 import {
   cloneEventSchemaDraft,
-  createEventSchemaMutators,
-  validateEventSchemaDraft,
+  validateEventDefinition,
+  validateEventSchemaSettings,
 } from "./event-schema-editor-utils";
 
 type SchemaScope = "programme" | "campaign";
 
+const NEW_EVENT_KEY = "__new__";
 const TERMINAL_CAMPAIGN_STATUSES = new Set(["ENDED", "EXHAUSTED", "EXPIRED"]);
+
+const DEFAULT_NEW_EVENT: EventSchemaDefinitionDraft = {
+  eventType: "EVENT_1",
+  coreFields: [
+    { name: "transactionId", type: "string", required: true },
+    { name: "eventType", type: "string", required: true },
+  ],
+};
 
 export function EventSchemaSetupPanel() {
   const tenantId = useOnboardingStore((s) => s.tenantId);
@@ -49,13 +64,22 @@ export function EventSchemaSetupPanel() {
   const [loadingList, setLoadingList] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [configMissing, setConfigMissing] = useState(false);
   const [responseTenantId, setResponseTenantId] = useState<string | null>(null);
   const [configVersion, setConfigVersion] = useState(0);
   const [draft, setDraft] = useState<EventSchemaDraft>(defaultEventSchemaDraft());
-  const [baselineDraft, setBaselineDraft] = useState<EventSchemaDraft>(defaultEventSchemaDraft());
-  const mutators = useMemo(() => createEventSchemaMutators(setDraft), []);
+
+  const [editingEventKey, setEditingEventKey] = useState<string | null>(null);
+  const [eventEditDraft, setEventEditDraft] = useState<EventSchemaDefinitionDraft | null>(null);
+  const [editingSettings, setEditingSettings] = useState(false);
+  const [settingsEditDraft, setSettingsEditDraft] = useState<EventSchemaDraft | null>(null);
+
+  const resetEditState = useCallback(() => {
+    setEditingEventKey(null);
+    setEventEditDraft(null);
+    setEditingSettings(false);
+    setSettingsEditDraft(null);
+  }, []);
 
   const programmeLabel = useMemo(
     () => programmeRows.find((p) => p.programmeUid === programmeUid)?.name ?? programmeUid,
@@ -72,6 +96,12 @@ export function EventSchemaSetupPanel() {
   const campaignSchemaLocked = Boolean(
     selectedCampaign && TERMINAL_CAMPAIGN_STATUSES.has(selectedCampaign.status)
   );
+
+  const applyDraftFromRoot = useCallback((root: Record<string, unknown>) => {
+    const d = eventSchemaDraftFromConfigRoot(root);
+    setDraft(d);
+    resetEditState();
+  }, [resetEditState]);
 
   const loadProgrammes = useCallback(async () => {
     if (!tenantId) return;
@@ -116,22 +146,19 @@ export function EventSchemaSetupPanel() {
       const root = (blob.config ?? {}) as Record<string, unknown>;
       if (!isLikelyCompleteProgrammeConfig(root)) {
         setConfigMissing(true);
-        const empty = defaultEventSchemaDraft();
-        setDraft(empty);
-        setBaselineDraft(cloneEventSchemaDraft(empty));
+        setDraft(defaultEventSchemaDraft());
+        resetEditState();
         return;
       }
       setConfigMissing(false);
-      const d = eventSchemaDraftFromConfigRoot(root);
-      setDraft(d);
-      setBaselineDraft(cloneEventSchemaDraft(d));
+      applyDraftFromRoot(root);
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
       setConfigMissing(true);
     } finally {
       setLoadingConfig(false);
     }
-  }, [tenantId, programmeUid]);
+  }, [tenantId, programmeUid, applyDraftFromRoot, resetEditState]);
 
   const loadCampaignSchema = useCallback(async () => {
     if (!tenantId || !campaignUid) return;
@@ -150,13 +177,13 @@ export function EventSchemaSetupPanel() {
         programmeConfigRoot: progRoot,
       });
       setDraft(d);
-      setBaselineDraft(cloneEventSchemaDraft(d));
+      resetEditState();
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
     } finally {
       setLoadingConfig(false);
     }
-  }, [tenantId, campaignUid, programmeUid]);
+  }, [tenantId, campaignUid, programmeUid, resetEditState]);
 
   useEffect(() => {
     void loadProgrammes();
@@ -169,73 +196,87 @@ export function EventSchemaSetupPanel() {
   }, [scope, loadCampaigns]);
 
   useEffect(() => {
-    setEditing(false);
+    resetEditState();
     if (scope === "programme") {
       void loadProgrammeSchema();
     } else if (campaignUid) {
       void loadCampaignSchema();
     }
-  }, [scope, loadProgrammeSchema, loadCampaignSchema, campaignUid]);
+  }, [scope, loadProgrammeSchema, loadCampaignSchema, campaignUid, resetEditState]);
 
-  const cancelEdit = () => {
-    setDraft(cloneEventSchemaDraft(baselineDraft));
-    setEditing(false);
+  const startEditEvent = (eventType: string) => {
+    const def = draft.eventDefinitions.find((d) => eventKeysEqual(d.eventType, eventType));
+    if (!def) return;
+    setEditingSettings(false);
+    setSettingsEditDraft(null);
+    setEditingEventKey(eventType);
+    setEventEditDraft({
+      eventType: def.eventType,
+      coreFields: def.coreFields.map((f) => ({ ...f })),
+    });
   };
 
-  const persistProgramme = async () => {
-    const err = validateEventSchemaDraft(draft);
+  const startAddEvent = () => {
+    setEditingSettings(false);
+    setSettingsEditDraft(null);
+    setEditingEventKey(NEW_EVENT_KEY);
+    setEventEditDraft({
+      ...DEFAULT_NEW_EVENT,
+      eventType: `EVENT_${draft.eventDefinitions.length + 1}`,
+      coreFields: DEFAULT_NEW_EVENT.coreFields.map((f) => ({ ...f })),
+    });
+  };
+
+  const startEditSettings = () => {
+    setEditingEventKey(null);
+    setEventEditDraft(null);
+    setEditingSettings(true);
+    setSettingsEditDraft(cloneEventSchemaDraft(draft));
+  };
+
+  const saveEventDefinition = async () => {
+    if (!eventEditDraft || !editingEventKey || !tenantId) return;
+    const err = validateEventDefinition(eventEditDraft);
     if (err) {
       toast.error(err);
       return;
     }
-    if (!tenantId) return;
-    setSaving(true);
-    try {
-      await ensureAuthSession();
-      const fresh = await programmeApiV2.getProgrammeConfig(programmeUid);
-      if (fresh.tenantId && tenantId && fresh.tenantId !== tenantId) {
-        toast.error("Cannot save: tenant mismatch.");
-        return;
-      }
-      const root = (fresh.config ?? {}) as Record<string, unknown>;
-      if (!isLikelyCompleteProgrammeConfig(root)) {
-        toast.error("Save a full programme configuration under Configure Programme first.");
-        return;
-      }
-      const merged = mergeEventSchemaIntoProgrammeConfig(root, draft);
-      await programmeApiV2.upsertProgrammeConfig(programmeUid, { config: merged });
-      toast.success("Programme event schema saved");
-      setEditing(false);
-      await loadProgrammeSchema();
-    } catch (e) {
-      if (e instanceof ApiError) toast.error(e.message);
-      else toast.error("Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const persistCampaign = async () => {
-    const err = validateEventSchemaDraft(draft);
-    if (err) {
-      toast.error(err);
-      return;
-    }
-    if (!tenantId || !campaignUid) return;
-    if (campaignSchemaLocked) {
+    if (scope === "campaign" && campaignSchemaLocked) {
       toast.error("Cannot edit schema for a ended or expired campaign.");
       return;
     }
+
+    const payload = buildEventDefinitionPayload(eventEditDraft);
+    const isNew = editingEventKey === NEW_EVENT_KEY;
+    if (isNew) {
+      const duplicate = draft.eventDefinitions.some((d) => eventKeysEqual(d.eventType, payload.eventType));
+      if (duplicate) {
+        toast.error(`Event type ${payload.eventType} already exists.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await ensureAuthSession();
-      await campaignsAdminApi.upsertCampaignEventSchema(campaignUid, {
-        eventSchema: buildEventSchemaJsonNode(draft),
-      });
-      toast.success("Campaign event schema saved");
-      setEditing(false);
-      await loadCampaignSchema();
-      await loadCampaigns();
+      if (scope === "programme") {
+        if (isNew) {
+          await programmeApiV2.addProgrammeEventDefinition(programmeUid, payload);
+        } else {
+          await programmeApiV2.patchProgrammeEventDefinition(programmeUid, editingEventKey, payload);
+        }
+        toast.success(isNew ? "Event type added" : `Saved ${payload.eventType}`);
+        await loadProgrammeSchema();
+      } else if (campaignUid) {
+        if (isNew) {
+          await campaignsAdminApi.addCampaignEventDefinition(campaignUid, payload);
+        } else {
+          await campaignsAdminApi.patchCampaignEventDefinition(campaignUid, editingEventKey, payload);
+        }
+        toast.success(isNew ? "Event type added" : `Saved ${payload.eventType}`);
+        await loadCampaignSchema();
+        await loadCampaigns();
+      }
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
       else toast.error("Save failed");
@@ -244,7 +285,68 @@ export function EventSchemaSetupPanel() {
     }
   };
 
-  const persist = scope === "programme" ? persistProgramme : persistCampaign;
+  const removeEventDefinition = async (eventType: string) => {
+    if (!tenantId || draft.eventDefinitions.length <= 1) return;
+    if (scope === "campaign" && campaignSchemaLocked) {
+      toast.error("Cannot edit schema for a ended or expired campaign.");
+      return;
+    }
+    if (!window.confirm(`Remove event type ${eventType}?`)) return;
+
+    setSaving(true);
+    try {
+      await ensureAuthSession();
+      if (scope === "programme") {
+        await programmeApiV2.removeProgrammeEventDefinition(programmeUid, eventType);
+        toast.success(`Removed ${eventType}`);
+        await loadProgrammeSchema();
+      } else if (campaignUid) {
+        await campaignsAdminApi.removeCampaignEventDefinition(campaignUid, eventType);
+        toast.success(`Removed ${eventType}`);
+        await loadCampaignSchema();
+        await loadCampaigns();
+      }
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+      else toast.error("Remove failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!settingsEditDraft || !tenantId) return;
+    const err = validateEventSchemaSettings(settingsEditDraft);
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    if (scope === "campaign" && campaignSchemaLocked) {
+      toast.error("Cannot edit schema for a ended or expired campaign.");
+      return;
+    }
+
+    const payload = buildEventSchemaSettingsPayload(settingsEditDraft);
+    setSaving(true);
+    try {
+      await ensureAuthSession();
+      if (scope === "programme") {
+        await programmeApiV2.patchProgrammeEventSchemaSettings(programmeUid, payload);
+        toast.success("Schema settings saved");
+        await loadProgrammeSchema();
+      } else if (campaignUid) {
+        await campaignsAdminApi.patchCampaignEventSchemaSettings(campaignUid, payload);
+        toast.success("Schema settings saved");
+        await loadCampaignSchema();
+        await loadCampaigns();
+      }
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+      else toast.error("Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const previewJson = useMemo(() => JSON.stringify(buildEventSchemaJsonNode(draft), null, 2), [draft]);
 
@@ -253,108 +355,13 @@ export function EventSchemaSetupPanel() {
   const showSchemaSection = !showProgrammeMissing && !showCampaignEmpty;
 
   return (
-    <SchemaSetupPanelView
-      scope={scope}
-      setScope={setScope}
-      programmeRows={programmeRows}
-      programmeUid={programmeUid}
-      setProgrammeUid={setProgrammeUid}
-      campaignRows={campaignRows}
-      campaignUid={campaignUid}
-      setCampaignUid={setCampaignUid}
-      loadingList={loadingList}
-      loadingConfig={loadingConfig}
-      programmeLabel={programmeLabel}
-      campaignLabel={campaignLabel}
-      selectedCampaign={selectedCampaign}
-      campaignSchemaLocked={campaignSchemaLocked}
-      responseTenantId={responseTenantId}
-      configVersion={configVersion}
-      showProgrammeMissing={showProgrammeMissing}
-      showCampaignEmpty={showCampaignEmpty}
-      showSchemaSection={showSchemaSection}
-      editing={editing}
-      setEditing={setEditing}
-      saving={saving}
-      cancelEdit={cancelEdit}
-      persist={persist}
-      draft={draft}
-      setDraft={setDraft}
-      mutators={mutators}
-      previewJson={previewJson}
-    />
-  );
-}
-
-function SchemaSetupPanelView(props: {
-  scope: SchemaScope;
-  setScope: (s: SchemaScope) => void;
-  programmeRows: Array<{ programmeUid: string; name: string }>;
-  programmeUid: string;
-  setProgrammeUid: (v: string) => void;
-  campaignRows: CampaignResponse[];
-  campaignUid: string;
-  setCampaignUid: (v: string) => void;
-  loadingList: boolean;
-  loadingConfig: boolean;
-  programmeLabel: string;
-  campaignLabel: string;
-  selectedCampaign?: CampaignResponse;
-  campaignSchemaLocked: boolean;
-  responseTenantId: string | null;
-  configVersion: number;
-  showProgrammeMissing: boolean;
-  showCampaignEmpty: boolean;
-  showSchemaSection: boolean;
-  editing: boolean;
-  setEditing: (v: boolean) => void;
-  saving: boolean;
-  cancelEdit: () => void;
-  persist: () => void;
-  draft: EventSchemaDraft;
-  setDraft: Dispatch<SetStateAction<EventSchemaDraft>>;
-  mutators: ReturnType<typeof createEventSchemaMutators>;
-  previewJson: string;
-}) {
-  const {
-    scope,
-    setScope,
-    programmeRows,
-    programmeUid,
-    setProgrammeUid,
-    campaignRows,
-    campaignUid,
-    setCampaignUid,
-    loadingList,
-    loadingConfig,
-    programmeLabel,
-    campaignLabel,
-    selectedCampaign,
-    campaignSchemaLocked,
-    responseTenantId,
-    configVersion,
-    showProgrammeMissing,
-    showCampaignEmpty,
-    showSchemaSection,
-    editing,
-    setEditing,
-    saving,
-    cancelEdit,
-    persist,
-    draft,
-    setDraft,
-    mutators,
-    previewJson,
-  } = props;
-
-  return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-1">
+        <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">Event schema</h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
             Configure JSON payload fields per event type for your <strong>programme</strong> (tenant-wide rules) or per{" "}
-            <strong>campaign</strong> (campaign earn rules). Campaign schemas are stored on each campaign record.
+            <strong>campaign</strong> (campaign earn rules). Each event type is edited and saved independently.
           </p>
         </div>
         {responseTenantId && scope === "programme" ? (
@@ -403,10 +410,10 @@ function SchemaSetupPanelView(props: {
                 ariaLabel="Programme"
                 className="max-w-md"
                 value={programmeUid}
-                disabled={loadingList || loadingConfig}
+                disabled={loadingList || loadingConfig || saving}
                 onChange={(v) => {
                   setProgrammeUid(v);
-                  setEditing(false);
+                  resetEditState();
                 }}
                 options={programmeRows.map((p) => ({ value: p.programmeUid, label: p.name }))}
               />
@@ -418,10 +425,10 @@ function SchemaSetupPanelView(props: {
                   ariaLabel="Campaign"
                   className="max-w-md"
                   value={campaignUid}
-                  disabled={loadingList || loadingConfig || campaignRows.length === 0}
+                  disabled={loadingList || loadingConfig || saving || campaignRows.length === 0}
                   onChange={(v) => {
                     setCampaignUid(v);
-                    setEditing(false);
+                    resetEditState();
                   }}
                   options={
                     campaignRows.length === 0
@@ -459,66 +466,88 @@ function SchemaSetupPanelView(props: {
 
         {showSchemaSection ? (
           <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  {scope === "programme" ? "Programme event schema" : "Campaign event schema"}
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground leading-relaxed max-w-3xl">
-                  {scope === "programme"
-                    ? "Stored in programme_config.config_json.eventSchema. Used by programme earn rules and as the default template for campaigns."
-                    : "Stored in campaigns.event_schema. Used by campaign earn rules for condition fields. Saving also updates the campaign event type list."}
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                {scope === "programme" ? "Programme event schema" : "Campaign event schema"}
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground leading-relaxed max-w-3xl">
+                {scope === "programme"
+                  ? "Stored in programme_config.config_json.eventSchema. Edit one event type at a time — only that definition is updated on save."
+                  : "Stored in campaigns.event_schema. Edit one event type at a time — other events are unchanged."}
+              </p>
+              {scope === "campaign" && selectedCampaign ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Status: <span className="font-medium text-foreground">{selectedCampaign.status}</span>
+                  {campaignSchemaLocked ? (
+                    <span className="ml-2 text-amber-700 dark:text-amber-300">Schema cannot be edited.</span>
+                  ) : null}
                 </p>
-                {scope === "campaign" && selectedCampaign ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Status: <span className="font-medium text-foreground">{selectedCampaign.status}</span>
-                    {campaignSchemaLocked ? (
-                      <span className="ml-2 text-amber-700 dark:text-amber-300">Schema cannot be edited.</span>
-                    ) : null}
-                  </p>
-                ) : null}
-              </div>
-              {!editing ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-2"
-                  onClick={() => setEditing(true)}
-                  disabled={loadingConfig || (scope === "campaign" && campaignSchemaLocked)}
-                >
-                  <Pencil className="h-4 w-4" />
-                  Edit
-                </Button>
-              ) : (
-                <div className="flex flex-wrap gap-2 shrink-0">
-                  <Button type="button" variant="ghost" size="sm" onClick={cancelEdit} disabled={saving}>
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-brand-600 hover:bg-brand-700 text-white"
-                    onClick={persist}
-                    disabled={saving}
-                  >
-                    {saving ? "Saving…" : "Save changes"}
-                  </Button>
-                </div>
-              )}
+              ) : null}
             </div>
 
             {loadingConfig ? (
               <p className="text-sm text-muted-foreground">Loading schema…</p>
-            ) : !editing ? (
-              <ReadOnlyEventSchema draft={draft} />
             ) : (
-              <EventSchemaEditorForm draft={draft} setDraft={setDraft} mutators={mutators} />
+              <div className="space-y-4">
+                {editingSettings && settingsEditDraft ? (
+                  <SchemaSettingsEditCard
+                    draft={settingsEditDraft}
+                    setDraft={(updater) => {
+                      setSettingsEditDraft((prev) => {
+                        if (!prev) return prev;
+                        return typeof updater === "function" ? updater(prev) : updater;
+                      });
+                    }}
+                    saving={saving}
+                    onCancel={() => {
+                      setEditingSettings(false);
+                      setSettingsEditDraft(null);
+                    }}
+                    onSave={() => void saveSettings()}
+                  />
+                ) : null}
+
+                <ReadOnlyEventSchema
+                  draft={{
+                    ...draft,
+                    eventDefinitions: draft.eventDefinitions.filter(
+                      (def) => !editingEventKey || !eventKeysEqual(def.eventType, editingEventKey)
+                    ),
+                  }}
+                  editingEventKey={editingEventKey}
+                  editingSettings={editingSettings}
+                  campaignSchemaLocked={campaignSchemaLocked}
+                  saving={saving}
+                  onEditEvent={startEditEvent}
+                  onRemoveEvent={(eventType) => void removeEventDefinition(eventType)}
+                  onAddEvent={startAddEvent}
+                  onEditSettings={startEditSettings}
+                />
+
+                {editingEventKey && eventEditDraft ? (
+                  <EventDefinitionEditCard
+                    draft={eventEditDraft}
+                    setDraft={(updater) => {
+                      setEventEditDraft((prev) => {
+                        if (!prev) return prev;
+                        return typeof updater === "function" ? updater(prev) : updater;
+                      });
+                    }}
+                    isNew={editingEventKey === NEW_EVENT_KEY}
+                    saving={saving}
+                    onCancel={() => {
+                      setEditingEventKey(null);
+                      setEventEditDraft(null);
+                    }}
+                    onSave={() => void saveEventDefinition()}
+                  />
+                ) : null}
+              </div>
             )}
           </div>
         ) : null}
 
-        {showSchemaSection && !editing ? (
+        {showSchemaSection && !editingEventKey && !editingSettings ? (
           <details className="rounded-xl border border-border/60 bg-muted/20 p-3">
             <summary className="text-xs font-medium cursor-pointer text-muted-foreground">Raw eventSchema JSON</summary>
             <pre className="mt-2 text-xs overflow-auto max-h-64 rounded-lg bg-background p-3 border border-border">

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "../FormField";
 import { StepHeader } from "../StepHeader";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { STATUS_TO_STEP } from "@/types/onboarding";
 import { onboardingApi, programmeApiV2, ApiError, ensureAuthSession } from "@/lib/api/client";
 import type { OnboardingSelectOption } from "@/types/onboarding";
 import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
@@ -460,8 +461,10 @@ function EventDefinitionCard({
 export function Step4Programme() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { tenantId, setProgrammeData, setSubmitting, isSubmitting, syncStatusFromBackend } =
+  const { tenantId, onboardingStatus, setProgrammeData, setSubmitting, isSubmitting, syncStatusFromBackend } =
     useOnboardingStore();
+  const isPostGoLiveEdit =
+    onboardingStatus != null && STATUS_TO_STEP[onboardingStatus] === "complete";
   const [tiersEnabled, setTiersEnabled] = useState(true);
   const [programmes, setProgrammes] = useState<Array<{ programmeUid: string; name: string }>>([
     { programmeUid: "default", name: "Default programme" },
@@ -492,9 +495,9 @@ export function Step4Programme() {
       subtitle: "Points expiry model, breakage frequency, exports, breakdowns.",
     },
     {
-      title: "Events & Webhook",
+      title: "Events",
       subtitle:
-        "Per-event type core fields, optional custom fields, backward compatibility window, sandbox webhook URL.",
+        "Per-event type core fields, optional custom fields, and backward compatibility window.",
     },
   ];
 
@@ -667,7 +670,6 @@ export function Step4Programme() {
   useEffect(() => {
     if (!tenantId) return;
     if (!selectedProgrammeUid) return;
-    if (selectedProgrammeUid === "default") return; // default configured via legacy + v2 upsert on save
     let cancelled = false;
     (async () => {
       try {
@@ -870,7 +872,12 @@ export function Step4Programme() {
         })),
       }));
 
+      // Preserve sections managed elsewhere (e.g. rewardCatalog on Rewards Catalog page).
+      const freshConfig = await programmeApiV2.getProgrammeConfig(data.programmeUid);
+      const existingRoot = (freshConfig.config ?? {}) as Record<string, unknown>;
+
       const programmeConfig = {
+        ...existingRoot,
         programmeIdentity: {
           programmeName: data.programmeName,
           pointsName: data.pointsName,
@@ -957,12 +964,16 @@ export function Step4Programme() {
         programmeName: data.programmeName,
         pointsName: data.pointsName,
       });
-      // Guided flow: after configuration is saved, go to Rules Setup.
-      // Status progression:
-      // - backend transitions AGREEMENT_SIGNED → CONFIGURED when config is saved (default via legacy; non-default via v2)
-      syncStatusFromBackend("CONFIGURED");
-      toast.success("Programme configured successfully!");
-      router.replace("/dashboard/loyalty-rules/create/basic-info");
+
+      if (isPostGoLiveEdit) {
+        toast.success("Configuration saved successfully.");
+        router.replace("/dashboard/configure/my-configurations");
+      } else {
+        // Guided setup: backend transitions AGREEMENT_SIGNED → CONFIGURED on save.
+        syncStatusFromBackend("CONFIGURED");
+        toast.success("Programme configured successfully!");
+        router.replace("/dashboard/loyalty-rules/create/basic-info");
+      }
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
     } finally {
@@ -1750,7 +1761,7 @@ export function Step4Programme() {
           </div>
         </div>
 
-        {/* Step 4: Event Schema & Webhook */}
+        {/* Step 4: Event Schema */}
         <div className={cn(configStep === 3 ? "space-y-6" : "hidden")}>
           <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -1934,7 +1945,7 @@ export function Step4Programme() {
           </div>
           </div>
 
-          <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
+          {/* <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Webhook Endpoint
           </h3>
@@ -1952,7 +1963,7 @@ export function Step4Programme() {
               {...register("webhookEndpoint")}
             />
           </FormField>
-          </div>
+          </div> */}
         </div>
 
         {/* Stepper footer */}

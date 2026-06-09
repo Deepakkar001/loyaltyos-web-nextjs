@@ -7,6 +7,7 @@ import { AnalyticsPanel } from "@/components/analytics/analytics-panel";
 import { AnalyticsSectionHeading } from "@/components/analytics/analytics-section-heading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -23,6 +24,7 @@ import { KpiCard } from "@/components/tenant-dashboard/KpiCard";
 import type {
   CohortRetentionRow,
   RuleEffectivenessRow,
+  TierDistributionRow,
   TierUpgradeCohortRow,
   TierVelocityBucketRow,
 } from "@/types/analytics";
@@ -134,25 +136,65 @@ function TierUpgradeTab() {
   const { programmeUid } = useAnalyticsProgramme();
   const [rows, setRows] = useState<TierUpgradeCohortRow[]>([]);
   const [velocity, setVelocity] = useState<TierVelocityBucketRow[]>([]);
-  const [tierName, setTierName] = useState("Silver");
+  const [tiers, setTiers] = useState<TierDistributionRow[]>([]);
+  const [tierName, setTierName] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const upgradeTiers = useMemo(
+    () => [...tiers].filter((t) => t.rankOrder >= 2).sort((a, b) => a.rankOrder - b.rankOrder),
+    [tiers]
+  );
+  const secondTier = upgradeTiers[0];
+  const thirdTier = upgradeTiers[1];
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      const tierRows = await fetchAnalyticsOrEmpty(
+        () => analyticsApi.getTierDistribution(programmeUid),
+        []
+      );
+      setTiers(tierRows);
       const upgrade = await fetchAnalyticsOrEmpty(
         () => analyticsApi.getTierUpgradeCohort(programmeUid),
         []
       );
       setRows(upgrade);
+      setLoading(false);
+    })();
+  }, [programmeUid]);
+
+  useEffect(() => {
+    if (upgradeTiers.length === 0) {
+      setTierName("");
+      setVelocity([]);
+      return;
+    }
+    setTierName((prev) =>
+      prev && upgradeTiers.some((t) => t.tierName === prev) ? prev : upgradeTiers[0].tierName
+    );
+  }, [upgradeTiers]);
+
+  useEffect(() => {
+    if (!tierName) {
+      setVelocity([]);
+      return;
+    }
+    (async () => {
       setVelocity(
         await fetchAnalyticsOrEmpty(() => analyticsApi.getTierVelocity(tierName, programmeUid), [])
       );
-      setLoading(false);
     })();
   }, [tierName, programmeUid]);
 
   if (loading) return <SkeletonPanel />;
+
+  const cohortEmptyMessage =
+    upgradeTiers.length < 2
+      ? "Configure at least two upgrade tiers (rank 2+) in programme settings to track upgrades."
+      : rows.length === 0
+        ? "No earning activity yet. Process integration events so members earn points; tier upgrades are recorded when balance crosses a higher tier threshold."
+        : null;
 
   return (
     <div className="space-y-6">
@@ -160,20 +202,20 @@ function TierUpgradeTab() {
         <AnalyticsSectionHeading
           title="Tier upgrade by acquisition cohort"
           titleClassName="text-base font-semibold"
-          helpText="Table: each row is an acquisition cohort (first CREDIT month) versus upgrade metrics — % reaching rank-2 and rank-3 tiers and average days from first earn. Requires tier history for the selected programme."
+          helpText="Each row is an acquisition cohort (month of first points earned). Upgrade % and days-to-tier use tier_history when a member's balance crosses into rank 2+ tiers (e.g. Gold, Platinum). The base tier (rank 1) is assigned at zero balance and is not counted as an upgrade."
         />
-        {rows.length === 0 ? (
-          <EmptyPanel message="No tier history yet. Tier changes are recorded when members earn points." />
+        {cohortEmptyMessage ? (
+          <EmptyPanel message={cohortEmptyMessage} />
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-muted-foreground text-left">
                 <th className="py-2">Cohort</th>
                 <th className="py-2 text-right">Size</th>
-                <th className="py-2 text-right">Silver %</th>
-                <th className="py-2 text-right">Gold %</th>
-                <th className="py-2 text-right">Avg days → Silver</th>
-                <th className="py-2 text-right">Avg days → Gold</th>
+                <th className="py-2 text-right">{secondTier?.tierName ?? "Rank 2"} %</th>
+                <th className="py-2 text-right">{thirdTier?.tierName ?? "Rank 3"} %</th>
+                <th className="py-2 text-right">Avg days → {secondTier?.tierName ?? "rank 2"}</th>
+                <th className="py-2 text-right">Avg days → {thirdTier?.tierName ?? "rank 3"}</th>
               </tr>
             </thead>
             <tbody>
@@ -199,18 +241,23 @@ function TierUpgradeTab() {
             titleClassName="text-base font-semibold"
             helpText="Bar chart: X-axis is days-from-first-earn bucket (0–7, 8–14, etc.); Y-axis is member count who reached the selected tier in that window. Use the dropdown to switch target tier."
           />
-          <Select value={tierName} onValueChange={(v) => v && setTierName(v)}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Silver">Silver</SelectItem>
-              <SelectItem value="Gold">Gold</SelectItem>
-            </SelectContent>
-          </Select>
+          {upgradeTiers.length > 0 ? (
+            <NativeSelect
+              ariaLabel="Target tier"
+              value={tierName}
+              onChange={setTierName}
+              className="w-[160px]"
+              variant="compact"
+              options={upgradeTiers.map((t) => ({ value: t.tierName, label: t.tierName }))}
+            />
+          ) : null}
         </div>
-        {velocity.length === 0 ? (
-          <EmptyPanel message={`No members reached ${tierName} yet.`} />
+        {upgradeTiers.length === 0 ? (
+          <EmptyPanel message="No upgrade tiers configured (rank 2+). Add tiers in Configure Programme." />
+        ) : velocity.length === 0 ? (
+          <EmptyPanel
+            message={`No members have upgraded to ${tierName} yet. Send purchase events that push balance above that tier's entry threshold.`}
+          />
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">

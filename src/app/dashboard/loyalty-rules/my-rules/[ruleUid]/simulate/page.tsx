@@ -69,9 +69,26 @@ type SandboxValidateResponse = {
   targetedCustomerOk?: boolean;
   targetedErrorCode?: string;
   targetedErrorMessage?: string;
+  ruleEvaluationSkipped?: boolean;
+  ruleEvaluationSkippedReason?: string;
   ruleEvaluation?: RuleEval;
   ruleEvaluationError?: string;
 };
+
+/** When a campaign rule targets a list, non-members must not show rule matches or points. */
+function effectiveRuleEvaluation(res: SandboxValidateResponse): RuleEval | null {
+  if (res.targetedCustomerOk === false) {
+    return {
+      message: "No match",
+      finalPointsAwarded: 0,
+      matchedRules: [],
+      suppressedRules: [],
+      rewardCommands: [],
+      catalogGrants: [],
+    };
+  }
+  return res.ruleEvaluation ?? null;
+}
 
 function fieldsIdentity(fields: SandboxFormField[]): string {
   return fields.map((f) => `${f.name}:${f.source}:${f.widget}`).join("|");
@@ -235,7 +252,7 @@ export default function RuleSimulatePage() {
       const res = (await integrationApi.validateSandboxEvent(payloadJson, ruleUid)) as SandboxValidateResponse;
       setResult(res);
 
-      const ruleEval = res.ruleEvaluation;
+      const ruleEval = effectiveRuleEvaluation(res);
       const matchedRules = Array.isArray(ruleEval?.matchedRules) ? ruleEval.matchedRules : [];
       const didMatch =
         res.sandboxPassed === true ||
@@ -528,40 +545,50 @@ export default function RuleSimulatePage() {
             <p className="text-sm text-muted-foreground">Run a test to see evaluation output.</p>
           ) : (
             <div className="space-y-3">
+              {result.targetedCustomerOk === false && result.targetedErrorMessage ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                  {result.targetedErrorMessage}
+                </div>
+              ) : null}
+
               {result.ruleEvaluationError ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
                   {result.ruleEvaluationError}
                 </div>
               ) : null}
 
-              {result.ruleEvaluation ? (
+              {effectiveRuleEvaluation(result) ? (
                 <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                   <p className="text-sm font-semibold">Outcome</p>
-                  {result.ruleEvaluation.message ? (
+                  {(() => {
+                    const ruleEval = effectiveRuleEvaluation(result)!;
+                    return (
+                      <>
+                  {ruleEval.message ? (
                     <p className="text-sm text-foreground rounded-lg border border-border bg-[var(--surface-sunken)] px-3 py-2">
-                      {result.ruleEvaluation.message}
+                      {ruleEval.message}
                     </p>
                   ) : null}
                   <div className="text-sm text-muted-foreground">
                     <div>
                       Final points:{" "}
-                      <span className="text-foreground font-semibold">{result.ruleEvaluation.finalPointsAwarded ?? "-"}</span>
+                      <span className="text-foreground font-semibold">{ruleEval.finalPointsAwarded ?? 0}</span>
                     </div>
-                    <div>Matched rules: {result.ruleEvaluation.matchedRules?.length ?? 0}</div>
-                    <div>Suppressed rules: {result.ruleEvaluation.suppressedRules?.length ?? 0}</div>
+                    <div>Matched rules: {ruleEval.matchedRules?.length ?? 0}</div>
+                    <div>Suppressed rules: {ruleEval.suppressedRules?.length ?? 0}</div>
                     <div>
                       Catalog grants:{" "}
                       <span className="text-foreground font-semibold">
-                        {result.ruleEvaluation.catalogGrants?.length ?? 0}
+                        {ruleEval.catalogGrants?.length ?? 0}
                       </span>
                     </div>
                   </div>
 
                   <div className="pt-2">
                     <p className="text-sm font-semibold">Matched rules</p>
-                    {result.ruleEvaluation.matchedRules?.length ? (
+                    {ruleEval.matchedRules?.length ? (
                       <div className="mt-2 space-y-2">
-                        {result.ruleEvaluation.matchedRules.map((m, idx) => (
+                        {ruleEval.matchedRules.map((m, idx) => (
                           <div key={idx} className="rounded-xl border border-border bg-[var(--surface-sunken)] p-3 text-sm">
                             <div className="font-medium">{m.ruleName ?? m.ruleUid}</div>
                             <div className="text-xs text-muted-foreground mt-1">
@@ -581,9 +608,9 @@ export default function RuleSimulatePage() {
                       Issued when the rule matches — not a points ledger debit.{" "}
                       <span className="font-medium">Redemption cost</span> is what the member spends later to redeem.
                     </p>
-                    {result.ruleEvaluation.catalogGrants?.length ? (
+                    {ruleEval.catalogGrants?.length ? (
                       <div className="mt-2 space-y-2">
-                        {result.ruleEvaluation.catalogGrants.map((g, idx) => (
+                        {ruleEval.catalogGrants.map((g, idx) => (
                           <div
                             key={idx}
                             className={`rounded-xl border p-3 text-sm ${
@@ -618,9 +645,9 @@ export default function RuleSimulatePage() {
 
                   <div className="pt-2">
                     <p className="text-sm font-semibold">Reward commands (points)</p>
-                    {result.ruleEvaluation.rewardCommands?.length ? (
+                    {ruleEval.rewardCommands?.length ? (
                       <div className="mt-2 space-y-2">
-                        {result.ruleEvaluation.rewardCommands.map((c, idx) => (
+                        {ruleEval.rewardCommands.map((c, idx) => (
                           <div key={idx} className="rounded-xl border border-border bg-[var(--surface-sunken)] p-3 text-sm">
                             <div className="font-medium">{c.actionType ?? "ACTION"}</div>
                             <div className="text-xs text-muted-foreground mt-1">
@@ -637,9 +664,12 @@ export default function RuleSimulatePage() {
                   <details className="pt-2">
                     <summary className="text-sm font-semibold cursor-pointer">Raw trace</summary>
                     <pre className="mt-2 text-xs overflow-auto rounded-xl border border-border bg-[var(--surface-sunken)] p-3">
-                      {JSON.stringify(result.ruleEvaluation.evaluationTrace ?? {}, null, 2)}
+                      {JSON.stringify(ruleEval.evaluationTrace ?? result.ruleEvaluation?.evaluationTrace ?? {}, null, 2)}
                     </pre>
                   </details>
+                      </>
+                    );
+                  })()}
                 </div>
               ) : null}
 

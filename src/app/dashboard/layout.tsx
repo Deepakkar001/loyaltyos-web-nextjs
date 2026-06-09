@@ -35,6 +35,7 @@ import { ensureAuthSession, onboardingApi } from "@/lib/api/client";
 import { STATUS_TO_STEP, type OnboardingStatus } from "@/types/onboarding";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import toast from "react-hot-toast";
 
 type NavItem = {
@@ -55,13 +56,26 @@ function isOnboardingComplete(status: OnboardingStatus | null): boolean {
   return status != null && STATUS_TO_STEP[status] === "complete";
 }
 
-const NAV_GROUPS: NavGroup[] = [
+const LOCKED_NAV_TOOLTIP =
+  "Complete Setup Progress and go live to unlock this section.";
+
+const SETUP_PROGRESS_GROUP: NavGroup = {
+  label: "Setup Progress",
+  items: [
+    { href: "/dashboard/configure", label: "Setup Programme", icon: Settings },
+    { href: "/dashboard/loyalty-rules/create/basic-info", label: "Rules Setup", icon: GitBranchPlus },
+    { href: INTEGRATIONS_HREF, label: "Integrate", icon: Plug },
+    { href: "/dashboard/go-live", label: "Go Live", icon: Rocket },
+  ],
+};
+
+const MAIN_NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
     items: [{ href: "/dashboard", label: "Overview", icon: LayoutGrid }],
   },
   {
-    label: "Setup & Config",
+    label: "Configuration",
     items: [
       { href: "/dashboard/configure", label: "Configure Programme", icon: Settings },
       { href: "/dashboard/configure/my-configurations", label: "My Configurations", icon: Search },
@@ -121,28 +135,45 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/support/community", label: "Community Forum", icon: CircleHelp },
     ],
   },
-  {
-    label: "Setup Progress",
-    items: [
-      { href: "/dashboard/configure", label: "Configure", icon: Settings },
-      { href: "/dashboard/loyalty-rules/create/basic-info", label: "Rules Setup", icon: GitBranchPlus },
-      { href: INTEGRATIONS_HREF, label: "Integrate", icon: Plug },
-      { href: "/dashboard/go-live", label: "Go Live", icon: Rocket },
-    ],
-  },
 ];
+
+function getSetupRedirectPath(status: OnboardingStatus | null): string {
+  if (status === "AGREEMENT_SIGNED") return "/dashboard/configure";
+  if (status === "CONFIGURED") return "/dashboard/loyalty-rules/create/basic-info";
+  if (status === "RULES_CONFIGURED") return "/dashboard/integration";
+  if (status === "SANDBOX_TESTING") return "/dashboard/go-live";
+  return "/dashboard/configure";
+}
+
+/** Routes reachable while onboarding is incomplete (Setup Progress flow). */
+function isPathAllowedDuringOnboarding(pathname: string): boolean {
+  if (pathname.startsWith("/dashboard/configure")) return true;
+  if (pathname.startsWith("/dashboard/loyalty-rules/create")) return true;
+  if (
+    pathname.startsWith("/dashboard/loyalty-rules/my-rules/") &&
+    pathname !== "/dashboard/loyalty-rules/my-rules"
+  ) {
+    return true;
+  }
+  if (pathname.startsWith("/dashboard/integration")) return true;
+  if (pathname === "/dashboard/integrate") return true;
+  if (pathname.startsWith("/dashboard/go-live")) return true;
+  if (pathname === "/dashboard/rules") return true;
+  return false;
+}
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { onboardingStatus } = useOnboardingStore();
   const fraudQueueCount = useReferralNavStore((s) => s.fraudQueueCount);
+  const onboardingComplete = isOnboardingComplete(onboardingStatus);
 
   const navGroups = useMemo(
     () =>
-      isOnboardingComplete(onboardingStatus)
-        ? NAV_GROUPS.filter((g) => g.label !== "Setup Progress")
-        : NAV_GROUPS,
-    [onboardingStatus]
+      onboardingComplete
+        ? MAIN_NAV_GROUPS
+        : [SETUP_PROGRESS_GROUP, ...MAIN_NAV_GROUPS],
+    [onboardingComplete]
   );
 
   // Pick the single best-matching nav href (longest prefix wins) so a parent
@@ -159,57 +190,99 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
     return winner;
   }, [pathname, navGroups]);
 
+  const navItemClass = (active: boolean, locked: boolean) =>
+    cn(
+      "flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors outline-none",
+      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      locked
+        ? "cursor-not-allowed opacity-40 blur-[0.3px] select-none"
+        : active
+          ? "bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]"
+          : "text-muted-foreground hover:text-foreground hover:bg-gray-50 dark:hover:bg-white/[0.04]"
+    );
+
   return (
-    <nav className="px-3 py-4 space-y-6 overflow-y-auto" aria-label="Tenant sidebar navigation">
-      {navGroups.map((group) => (
-        <div key={group.label}>
-          <p className="px-3 pt-6 section-title">
-            {group.label}
-          </p>
-          <div className="mt-2 space-y-1">
-            {group.items.map((item) => {
-              const active = bestHref === item.href;
-              const Icon = item.icon;
-              const showDot =
-                (item.href === "/dashboard/configure" && onboardingStatus === "AGREEMENT_SIGNED") ||
-                (item.href === "/dashboard/loyalty-rules/create/basic-info" && onboardingStatus === "CONFIGURED") ||
-                (item.href === INTEGRATIONS_HREF && onboardingStatus === "RULES_CONFIGURED") ||
-                (item.href === "/dashboard/go-live" && onboardingStatus === "SANDBOX_TESTING");
-              const showFraudBadge =
-                item.href === "/dashboard/referrals/fraud-review" && fraudQueueCount > 0;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors outline-none",
-                    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                    active
-                      ? "bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-gray-50 dark:hover:bg-white/[0.04]"
-                  )}
-                >
-                  <Icon className={cn("h-4 w-4", "text-current")} />
-                  <span className="truncate">{item.label}</span>
-                  {showFraudBadge ? (
-                    <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-xs text-destructive-foreground">
-                      {fraudQueueCount}
-                    </span>
-                  ) : null}
-                  {showDot ? (
-                    <span
-                      aria-label="Action required"
-                      className="ml-auto h-2 w-2 rounded-full bg-brand-600"
-                    />
-                  ) : null}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </nav>
+    <TooltipProvider delay={200}>
+      <nav className="px-3 py-4 space-y-6 overflow-y-auto" aria-label="Tenant sidebar navigation">
+        {navGroups.map((group, groupIndex) => {
+          const groupLocked = !onboardingComplete && group.label !== "Setup Progress";
+          return (
+            <div
+              key={group.label}
+              className={cn(groupLocked && "pointer-events-none")}
+              aria-disabled={groupLocked || undefined}
+            >
+              <p className={cn("px-3 section-title", groupIndex === 0 ? "pt-0" : "pt-6")}>
+                {group.label}
+              </p>
+              <div className={cn("mt-2 space-y-1", groupLocked && "pointer-events-auto")}>
+                {group.items.map((item) => {
+                  const active = !groupLocked && bestHref === item.href;
+                  const Icon = item.icon;
+                  const showDot =
+                    !groupLocked &&
+                    ((item.href === "/dashboard/configure" && onboardingStatus === "AGREEMENT_SIGNED") ||
+                      (item.href === "/dashboard/loyalty-rules/create/basic-info" &&
+                        onboardingStatus === "CONFIGURED") ||
+                      (item.href === INTEGRATIONS_HREF && onboardingStatus === "RULES_CONFIGURED") ||
+                      (item.href === "/dashboard/go-live" && onboardingStatus === "SANDBOX_TESTING"));
+                  const showFraudBadge =
+                    !groupLocked &&
+                    item.href === "/dashboard/referrals/fraud-review" &&
+                    fraudQueueCount > 0;
+
+                  const row = (
+                    <>
+                      <Icon className={cn("h-4 w-4 shrink-0", "text-current")} />
+                      <span className="truncate">{item.label}</span>
+                      {showFraudBadge ? (
+                        <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-xs text-destructive-foreground">
+                          {fraudQueueCount}
+                        </span>
+                      ) : null}
+                      {showDot ? (
+                        <span
+                          aria-label="Action required"
+                          className="ml-auto h-2 w-2 rounded-full bg-brand-600"
+                        />
+                      ) : null}
+                    </>
+                  );
+
+                  if (groupLocked) {
+                    return (
+                      <Tooltip key={item.href}>
+                        <TooltipTrigger
+                          type="button"
+                          className={navItemClass(false, true)}
+                          onClick={(e) => e.preventDefault()}
+                        >
+                          {row}
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-[220px] text-center">
+                          {LOCKED_NAV_TOOLTIP}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onNavigate}
+                      className={navItemClass(active, false)}
+                    >
+                      {row}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </nav>
+    </TooltipProvider>
   );
 }
 
@@ -217,7 +290,15 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 export default function TenantDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { accessToken, companyName, email, logout, setRegistrationData } = useOnboardingStore();
+  const {
+    accessToken,
+    companyName,
+    email,
+    logout,
+    setRegistrationData,
+    onboardingStatus,
+    syncStatusFromBackend,
+  } = useOnboardingStore();
   const [hydrated, setHydrated] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [welcomeName, setWelcomeName] = useState<string | null>(null);
@@ -275,6 +356,9 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
         if (!alive) return;
         setWelcomeName(status.primaryContactName?.trim() || status.companyName?.trim() || null);
         setRegistrationData({ companyName: status.companyName, email: status.email });
+        if (status.onboardingStatus) {
+          syncStatusFromBackend(status.onboardingStatus);
+        }
         const review = status.latestAgreementStatus === "PENDING_APPROVAL";
         setUnderReview(review);
         if (review) {
@@ -293,12 +377,21 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
     return () => {
       alive = false;
     };
-  }, [accessToken, hydrated, setRegistrationData]);
+  }, [accessToken, hydrated, setRegistrationData, syncStatusFromBackend]);
+
+  const isLoginLikePath = pathname === "/login" || pathname.startsWith("/onboarding");
+
+  // Block non–Setup Progress routes until tenant is ACTIVE (onboarding complete).
+  useEffect(() => {
+    if (!hydrated || !accessToken || isLoginLikePath) return;
+    if (isOnboardingComplete(onboardingStatus)) return;
+    if (isPathAllowedDuringOnboarding(pathname)) return;
+    router.replace(getSetupRedirectPath(onboardingStatus));
+  }, [hydrated, accessToken, onboardingStatus, pathname, router, isLoginLikePath]);
 
   // After reload the in-memory access token is empty; restore it via refresh cookie.
   // Must run in an effect: updating state during render (the old refreshTried pattern) re-rendered
   // before ensureAuthSession() finished and immediately sent users to /login.
-  const isLoginLikePath = pathname === "/login" || pathname.startsWith("/onboarding");
   useEffect(() => {
     if (!hydrated || isLoginLikePath) return;
     if (typeof window !== "undefined" && sessionStorage.getItem("loyaltyos_logout_intent") === "1") {

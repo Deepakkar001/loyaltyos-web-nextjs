@@ -26,6 +26,18 @@ type GoLiveActivate = {
   message: string;
 };
 
+/** Checklist rows removed from the Go Live UI (handled elsewhere or not required). */
+function isHiddenGoLiveChecklistItem(item: GoLiveChecklistItem): boolean {
+  return /webhook/i.test(item.item);
+}
+
+function filterGoLiveChecklist(checklist: GoLiveChecklist): GoLiveChecklist {
+  return {
+    ...checklist,
+    items: checklist.items.filter((it) => !isHiddenGoLiveChecklistItem(it)),
+  };
+}
+
 export default function GoLivePage() {
   const router = useRouter();
   const { syncStatusFromBackend } = useOnboardingStore();
@@ -35,7 +47,7 @@ export default function GoLivePage() {
 
   const load = async () => {
     const res = (await goLiveApi.getChecklist()) as unknown;
-    setChecklist(res as GoLiveChecklist);
+    setChecklist(filterGoLiveChecklist(res as GoLiveChecklist));
   };
 
   useEffect(() => {

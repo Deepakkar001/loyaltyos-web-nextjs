@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
 import {
   EventSchemaEditorForm,
-  ReadOnlyEventSchema,
+  EventSchemaPreview,
 } from "@/components/dashboard/event-schema/EventSchemaEditor";
 import { createEventSchemaMutators } from "@/components/dashboard/event-schema/event-schema-editor-utils";
 import { Button } from "@/components/ui/button";
@@ -163,7 +163,7 @@ export function CampaignCreateEventSchemaSection() {
                 mutators={mutators}
               />
             ) : (
-              <ReadOnlyEventSchema draft={eventSchemaDraft} />
+              <EventSchemaPreview draft={eventSchemaDraft} />
             )}
           </div>
         </>

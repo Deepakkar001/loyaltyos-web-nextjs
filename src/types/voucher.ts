@@ -36,9 +36,14 @@ export interface VoucherBatchUploadResponse {
 
 export interface VoucherBatchListItem {
   batchUid: string;
+  programmeUid?: string;
   status: string;
   catalogRewardUid: string;
+  originalFilename?: string;
+  totalRowsUploaded?: number;
   importedCount: number;
+  duplicateCount?: number;
+  errorCount?: number;
   uploadedAt: string;
 }
 

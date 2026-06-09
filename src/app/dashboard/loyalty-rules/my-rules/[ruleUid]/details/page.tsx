@@ -182,7 +182,7 @@ export default function RuleDetailsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(rule.ruleUid)}/change-history?programmeUid=${encodeURIComponent(programmeUid)}`}>
-            <Button variant="outline" className="rounded-full">Change History</Button>
+            <Button variant="outline" className="rounded-full">View change-history</Button>
           </Link>
           <Link href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(rule.ruleUid)}/simulate?programmeUid=${encodeURIComponent(programmeUid)}`}>
             <Button variant="outline" className="rounded-full">Test (Sandbox)</Button>

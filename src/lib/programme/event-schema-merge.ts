@@ -189,6 +189,47 @@ export function extractEventTypesFromProgrammeConfig(
   return out;
 }
 
+export type EventDefinitionPayload = {
+  eventType: string;
+  coreFields: Array<{ name: string; type: EventSchemaFieldType; required: boolean }>;
+};
+
+export function buildEventDefinitionPayload(def: EventSchemaDefinitionDraft): EventDefinitionPayload {
+  return {
+    eventType: def.eventType.trim(),
+    coreFields: def.coreFields.map((f) => ({
+      name: f.name.trim(),
+      type: f.type,
+      required: f.required,
+    })),
+  };
+}
+
+export function buildEventSchemaSettingsPayload(draft: EventSchemaDraft): {
+  version: number;
+  backwardCompatibilityDays: number;
+  customFields: Array<Record<string, unknown>>;
+} {
+  return {
+    version: draft.version,
+    backwardCompatibilityDays: draft.backwardCompatibilityDays,
+    customFields: draft.customFields
+      .map((c) => {
+        const name = c.name.trim();
+        if (!name) return null;
+        const base: Record<string, unknown> = {
+          name,
+          type: c.type,
+          required: c.required,
+        };
+        const dep = (c.dependsOn ?? "").trim();
+        if (dep) base.validation = { dependsOn: dep };
+        return base;
+      })
+      .filter((x): x is Record<string, unknown> => x != null),
+  };
+}
+
 export function buildEventSchemaJsonNode(draft: EventSchemaDraft): Record<string, unknown> {
   const evDefs = draft.eventDefinitions.map((d) => ({
     eventType: d.eventType.trim(),

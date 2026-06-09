@@ -24,13 +24,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { AnalyticsProgrammeProvider, useAnalyticsProgramme } from "@/lib/analytics/analytics-programme-context";
 import { dashboardApi } from "@/lib/api/dashboard";
+import {
+  referralApi,
+  type ReferralDashboardResponse,
+  type ReferralTopReferrer,
+  type ReferralTrendPoint,
+} from "@/lib/api/client";
 import { getAccessToken } from "@/lib/auth/session";
 import type { DashboardOverview, DashboardVolumePoint } from "@/types/dashboard";
 
 type SeriesPoint = { x: string; y: number };
-type WidgetId = "kpis" | "health" | "rewards" | "tiers";
-const WIDGET_STORAGE_KEY = "tenant_dashboard_widgets_v2";
-const DEFAULT_WIDGET_ORDER: WidgetId[] = ["kpis", "health", "rewards", "tiers"];
+type WidgetId = "kpis" | "health" | "rewards" | "referrals" | "tiers";
+const WIDGET_STORAGE_KEY = "tenant_dashboard_widgets_v3";
+const DEFAULT_WIDGET_ORDER: WidgetId[] = ["kpis", "health", "rewards", "referrals", "tiers"];
 
 function ChartTooltip({
   active,
@@ -69,24 +75,54 @@ function sparkFromVolume(series: DashboardVolumePoint[], key: "issued" | "redeem
   }));
 }
 
+function sparkFromReferralTrends(trends: ReferralTrendPoint[], key: "referrals" | "rewarded"): SeriesPoint[] {
+  return trends.map((t, i) => ({
+    x: String(i),
+    y: Number(t[key]) || 0,
+  }));
+}
+
 function DashboardHomeContent() {
   const router = useRouter();
   const { programmes, programmeUid, programmeName, setProgrammeUid, programmesLoading } =
     useAnalyticsProgramme();
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [referralDashboard, setReferralDashboard] = useState<ReferralDashboardResponse | null>(null);
+  const [referralTrends, setReferralTrends] = useState<ReferralTrendPoint[]>([]);
+  const [referralTopReferrers, setReferralTopReferrers] = useState<ReferralTopReferrer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [widgetOrder, setWidgetOrder] = useState<WidgetId[]>(DEFAULT_WIDGET_ORDER);
   const [hiddenWidgets, setHiddenWidgets] = useState<WidgetId[]>([]);
 
+  const loadReferralSummary = useCallback(async (uid: string) => {
+    try {
+      const [dashboard, trends, topReferrers] = await Promise.all([
+        referralApi.getDashboard(uid),
+        referralApi.getTrends(uid, "DAILY", 7),
+        referralApi.getTopReferrers(uid, 5),
+      ]);
+      setReferralDashboard(dashboard);
+      setReferralTrends(trends);
+      setReferralTopReferrers(topReferrers);
+    } catch {
+      setReferralDashboard(null);
+      setReferralTrends([]);
+      setReferralTopReferrers([]);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     if (!getAccessToken()) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await dashboardApi.getOverview(programmeUid);
+      const [data] = await Promise.all([
+        dashboardApi.getOverview(programmeUid),
+        loadReferralSummary(programmeUid),
+      ]);
       setOverview(data);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load dashboard";
@@ -95,7 +131,7 @@ function DashboardHomeContent() {
     } finally {
       setLoading(false);
     }
-  }, [programmeUid]);
+  }, [programmeUid, loadReferralSummary]);
 
   useEffect(() => {
     if (!getAccessToken()) return;
@@ -104,7 +140,10 @@ function DashboardHomeContent() {
       setLoading(true);
       setError(null);
       try {
-        const data = await dashboardApi.getOverview(programmeUid);
+        const [data] = await Promise.all([
+          dashboardApi.getOverview(programmeUid),
+          loadReferralSummary(programmeUid),
+        ]);
         if (!cancelled) setOverview(data);
       } catch (e) {
         if (!cancelled) {
@@ -119,7 +158,7 @@ function DashboardHomeContent() {
     return () => {
       cancelled = true;
     };
-  }, [programmeUid]);
+  }, [programmeUid, loadReferralSummary]);
 
   useEffect(() => {
     try {
@@ -602,6 +641,83 @@ function DashboardHomeContent() {
         </motion.section>
       )}
 
+      {isVisible("referrals") && (
+        <motion.section
+          aria-label="Referral programme"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ order: widgetPosition("referrals") }}
+          className="space-y-4"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard
+              title="Total Referrals"
+              value={referralDashboard?.totalReferrals ?? 0}
+              tone="good"
+              trendPct={0}
+              sparkline={sparkFromReferralTrends(referralTrends, "referrals")}
+              onClick={() => router.push("/dashboard/referrals/analytics")}
+            />
+            <KpiCard
+              title="Referrals Rewarded"
+              value={referralDashboard?.rewarded ?? 0}
+              tone="good"
+              trendPct={0}
+              sparkline={sparkFromReferralTrends(referralTrends, "rewarded")}
+              onClick={() => router.push("/dashboard/referrals/analytics")}
+            />
+            <KpiCard
+              title="Referral Conversion"
+              value={referralDashboard?.conversionRatePercent ?? 0}
+              unit="%"
+              tone="info"
+              trendPct={0}
+              sparkline={sparkFromReferralTrends(referralTrends, "referrals")}
+              valueFormat={(v) => `${v.toFixed(1)}%`}
+              onClick={() => router.push("/dashboard/referrals/analytics")}
+            />
+            <KpiCard
+              title="Referral Points Issued"
+              value={Number(referralDashboard?.totalPointsIssued ?? 0)}
+              unit="pts"
+              tone="warn"
+              trendPct={0}
+              sparkline={sparkFromReferralTrends(referralTrends, "rewarded")}
+              valueFormat={(v) => Math.round(v).toLocaleString()}
+              onClick={() => router.push("/dashboard/referrals/analytics")}
+            />
+          </div>
+
+          <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="card-title text-foreground mb-1">Referral Analytics</h3>
+                <p className="text-xs text-muted-foreground">
+                  Trends and top referrers for the selected programme.
+                </p>
+              </div>
+              <Link href="/dashboard/referrals/analytics">
+                <Button variant="outline" size="sm">
+                  Full analytics
+                </Button>
+              </Link>
+            </div>
+            <Tabs defaultValue="trends" className="mt-4 gap-4">
+              <TabsList className="bg-[var(--surface-sunken)] rounded-full px-1.5 py-1 w-fit">
+                <TabsTrigger value="trends">Referrals over time</TabsTrigger>
+                <TabsTrigger value="referrers">Top referrers</TabsTrigger>
+              </TabsList>
+              <TabsContent value="trends">
+                <ReferralTrendsTable rows={referralTrends} />
+              </TabsContent>
+              <TabsContent value="referrers">
+                <ReferralTopReferrersTable rows={referralTopReferrers} />
+              </TabsContent>
+            </Tabs>
+          </Card>
+        </motion.section>
+      )}
+
       {isVisible("tiers") && (
         <motion.section style={{ order: widgetPosition("tiers") }}>
           <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
@@ -741,6 +857,70 @@ function RulesTable({
               <td className="py-3 text-right tabular-nums">
                 {Number(r.totalPointsAwarded).toLocaleString()}
               </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReferralTrendsTable({ rows }: { rows: ReferralTrendPoint[] }) {
+  if (rows.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-4">
+        No referral activity yet.{" "}
+        <Link href="/dashboard/referrals/create" className="text-[var(--accent-primary)] hover:underline">
+          Create a referral programme
+        </Link>{" "}
+        to get started.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <th className="text-left py-2">Period</th>
+            <th className="text-right py-2">Referrals</th>
+            <th className="text-right py-2">Rewarded</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50 dark:divide-white/[0.04]">
+          {rows.map((t) => (
+            <tr key={t.periodStart}>
+              <td className="py-3 font-medium">{t.periodStart}</td>
+              <td className="py-3 text-right tabular-nums">{t.referrals.toLocaleString()}</td>
+              <td className="py-3 text-right tabular-nums">{t.rewarded.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReferralTopReferrersTable({ rows }: { rows: ReferralTopReferrer[] }) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground py-4">No top referrers yet.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <th className="text-left py-2">Referrer</th>
+            <th className="text-right py-2">Referrals</th>
+            <th className="text-right py-2">Rewarded</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50 dark:divide-white/[0.04]">
+          {rows.map((r) => (
+            <tr key={r.referrerCustomerId}>
+              <td className="py-3 font-medium font-mono text-xs">{r.referrerCustomerId}</td>
+              <td className="py-3 text-right tabular-nums">{r.referralCount.toLocaleString()}</td>
+              <td className="py-3 text-right tabular-nums">{r.rewardedCount.toLocaleString()}</td>
             </tr>
           ))}
         </tbody>

@@ -18,8 +18,8 @@ export function useRewardCatalog(programmeUid: string) {
     setError(null);
     try {
       await ensureAuthSession();
-      const res = await programmeApiV2.getProgrammeConfig(programmeUid || "default");
-      const catalog = rewardCatalogDraftFromConfigRoot(res.config ?? {});
+      const res = await programmeApiV2.getMergedRewardCatalog(programmeUid || "default");
+      const catalog = rewardCatalogDraftFromConfigRoot({ rewardCatalog: res.rewardCatalog });
       setDraft(catalog);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load reward catalog");

@@ -11,23 +11,23 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { buttonVariants } from "@/components/ui/button";
-import { ApiError, ensureAuthSession, programmeApiV2 } from "@/lib/api/client";
+import { ApiError, ensureAuthSession, programmeApiV2, voucherApi } from "@/lib/api/client";
 import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
 import {
   rewardCatalogDraftFromConfigRoot,
   type RewardCatalogItemDraft,
 } from "@/lib/programme/reward-catalog-merge";
-import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { cn } from "@/lib/utils";
+import type { VoucherBatchListItem } from "@/types/voucher";
 
 export function VoucherProgramsPanel() {
-  const tenantId = useOnboardingStore((s) => s.tenantId);
   const [programmeUid, setProgrammeUid] = useState("default");
   const [programmeRows, setProgrammeRows] = useState([{ programmeUid: "default", name: "Default programme" }]);
   const [catalogRewardUid, setCatalogRewardUid] = useState("");
   const [voucherItems, setVoucherItems] = useState<RewardCatalogItemDraft[]>([]);
   const [savedActiveVoucherUids, setSavedActiveVoucherUids] = useState<Set<string>>(new Set());
   const [stockRefresh, setStockRefresh] = useState(0);
+  const [batchHistory, setBatchHistory] = useState<VoucherBatchListItem[]>([]);
 
   const loadProgrammes = useCallback(async () => {
     try {
@@ -40,14 +40,16 @@ export function VoucherProgramsPanel() {
   }, []);
 
   const loadCatalog = useCallback(async () => {
-    if (!tenantId) return;
     try {
       await ensureAuthSession();
-      const res = await programmeApiV2.getProgrammeConfig(programmeUid);
-      const root = (res.config ?? {}) as Record<string, unknown>;
-      const draft = rewardCatalogDraftFromConfigRoot(root);
+      const [mergedRes, batches] = await Promise.all([
+        programmeApiV2.getMergedRewardCatalog(programmeUid),
+        voucherApi.listBatches({ programmeUid }),
+      ]);
+      const draft = rewardCatalogDraftFromConfigRoot({ rewardCatalog: mergedRes.rewardCatalog });
       const vouchers = draft.items.filter((i) => i.rewardType.toUpperCase() === "VOUCHER");
       setVoucherItems(vouchers);
+      setBatchHistory(batches);
       const saved = new Set(
         vouchers.filter((i) => i.status === "ACTIVE").map((i) => i.rewardUid)
       );
@@ -58,7 +60,7 @@ export function VoucherProgramsPanel() {
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
     }
-  }, [tenantId, programmeUid, catalogRewardUid]);
+  }, [programmeUid, catalogRewardUid]);
 
   useEffect(() => {
     void loadProgrammes();
@@ -130,6 +132,50 @@ export function VoucherProgramsPanel() {
           />
         </div>
       </Card>
+
+      {batchHistory.length > 0 ? (
+        <Card className="p-5 border-border/70 bg-[var(--surface-card)] space-y-3">
+          <div>
+            <p className="text-sm font-semibold">Voucher upload history (MySQL)</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {batchHistory.length} batch(es) for programme <code className="text-[11px]">{programmeUid}</code>
+            </p>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-[var(--surface-sunken)] text-left text-xs text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Batch</th>
+                  <th className="px-3 py-2 font-medium">Catalog UID</th>
+                  <th className="px-3 py-2 font-medium">File</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Imported</th>
+                  <th className="px-3 py-2 font-medium">Uploaded</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batchHistory.map((b) => (
+                  <tr key={b.batchUid} className="border-b border-border/60 last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs">{b.batchUid.slice(0, 10)}…</td>
+                    <td className="px-3 py-2 font-mono text-xs">{b.catalogRewardUid}</td>
+                    <td className="px-3 py-2 text-xs max-w-[160px] truncate" title={b.originalFilename}>
+                      {b.originalFilename ?? "—"}
+                    </td>
+                    <td className="px-3 py-2">{b.status}</td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {b.importedCount}
+                      {b.errorCount ? ` (${b.errorCount} err)` : ""}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                      {b.uploadedAt ? new Date(b.uploadedAt).toLocaleString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       {selected && catalogRewardUid ? (
         <>

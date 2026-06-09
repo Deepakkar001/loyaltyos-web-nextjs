@@ -167,6 +167,25 @@ export interface ProgrammeConfigBlobResponse {
   config: unknown;
 }
 
+export interface RewardCatalogRecoveryResponse {
+  recoverable: boolean;
+  sourceConfigVersion?: number | null;
+  itemCount: number;
+  voucherItemCount: number;
+  message?: string | null;
+}
+
+export interface PortalRewardCatalogResponse {
+  tenantId: string;
+  programmeUid: string;
+  activeConfigVersion: number;
+  rewardCatalog: unknown;
+  mergedConfigVersions: number[];
+  synthesizedRewardUids: string[];
+  itemCount: number;
+  voucherBatchCount: number;
+}
+
 // ─── API Response Types ───────────────────────────────────────────────────────
 
 export interface TenantRegistrationResponse {

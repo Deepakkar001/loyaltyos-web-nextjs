@@ -38,7 +38,6 @@ import {
   type RewardCatalogItemDraft,
   type RewardCatalogItemStatus,
 } from "@/lib/programme/reward-catalog-merge";
-import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { cn } from "@/lib/utils";
 
 type CatalogItemFilterStatus = "ALL" | RewardCatalogItemStatus;
@@ -62,7 +61,6 @@ function filterCatalogItems(
 }
 
 export function RewardCatalogSetupPanel() {
-  const tenantId = useOnboardingStore((s) => s.tenantId);
   const [programmeUid, setProgrammeUid] = useState("default");
   const [programmeRows, setProgrammeRows] = useState([{ programmeUid: "default", name: "Default programme" }]);
   const [loading, setLoading] = useState(false);
@@ -75,6 +73,11 @@ export function RewardCatalogSetupPanel() {
   const [itemSearch, setItemSearch] = useState("");
   const [itemStatusFilter, setItemStatusFilter] = useState<CatalogItemFilterStatus>("ALL");
   const [itemTypeFilter, setItemTypeFilter] = useState("ALL");
+  const [dbSourceInfo, setDbSourceInfo] = useState<{
+    mergedConfigVersions: number[];
+    synthesizedRewardUids: string[];
+    voucherBatchCount: number;
+  } | null>(null);
 
   const loadProgrammes = useCallback(async () => {
     try {
@@ -87,24 +90,31 @@ export function RewardCatalogSetupPanel() {
   }, []);
 
   const loadConfig = useCallback(async () => {
-    if (!tenantId) return;
     setLoading(true);
     try {
       await ensureAuthSession();
-      const res = await programmeApiV2.getProgrammeConfig(programmeUid);
-      const root = (res.config ?? {}) as Record<string, unknown>;
-      const catalogDraft = rewardCatalogDraftFromConfigRoot(root);
+      const [configRes, mergedRes] = await Promise.all([
+        programmeApiV2.getProgrammeConfig(programmeUid),
+        programmeApiV2.getMergedRewardCatalog(programmeUid),
+      ]);
+      const root = (configRes.config ?? {}) as Record<string, unknown>;
+      const catalogDraft = rewardCatalogDraftFromConfigRoot({ rewardCatalog: mergedRes.rewardCatalog });
       setConfigRoot(root);
-      setConfigVersion(res.configVersion ?? 0);
+      setConfigVersion(mergedRes.activeConfigVersion ?? configRes.configVersion ?? 0);
       setDraft(catalogDraft);
       setBaseline(catalogDraft);
       setEditing(false);
+      setDbSourceInfo({
+        mergedConfigVersions: mergedRes.mergedConfigVersions ?? [],
+        synthesizedRewardUids: mergedRes.synthesizedRewardUids ?? [],
+        voucherBatchCount: mergedRes.voucherBatchCount ?? 0,
+      });
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
     } finally {
       setLoading(false);
     }
-  }, [tenantId, programmeUid]);
+  }, [programmeUid]);
 
   useEffect(() => {
     void loadProgrammes();
@@ -300,6 +310,30 @@ export function RewardCatalogSetupPanel() {
           Programme settings
         </Link>
       </div>
+
+      {dbSourceInfo &&
+      (dbSourceInfo.mergedConfigVersions.length > 0 ||
+        dbSourceInfo.synthesizedRewardUids.length > 0 ||
+        dbSourceInfo.voucherBatchCount > 0) ? (
+        <Card className="p-4 border-border/70 bg-[var(--surface-sunken)] space-y-1">
+          <p className="text-sm font-semibold">Loaded from MySQL</p>
+          <p className="text-sm text-muted-foreground">
+            {draft.items.length} catalog item(s)
+            {dbSourceInfo.mergedConfigVersions.length > 0
+              ? ` merged from programme_config version(s): ${dbSourceInfo.mergedConfigVersions.join(", ")}.`
+              : "."}
+            {dbSourceInfo.synthesizedRewardUids.length > 0
+              ? ` ${dbSourceInfo.synthesizedRewardUids.length} VOUCHER item(s) inferred from voucher_batch history.`
+              : null}
+            {dbSourceInfo.voucherBatchCount > 0
+              ? ` ${dbSourceInfo.voucherBatchCount} upload batch(es) on record.`
+              : null}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Click <strong>Save catalog</strong> to write the merged view into the active programme configuration.
+          </p>
+        </Card>
+      ) : null}
 
       <Card className="sticky top-14 z-20 xl:top-16 p-4 border-border/70 bg-[var(--surface-card)] shadow-sm overflow-visible">
         <div className="flex items-start gap-3 overflow-x-auto">
