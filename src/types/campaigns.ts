@@ -179,6 +179,78 @@ export interface CampaignStatsResponse {
   uniqueCustomersReached: number;
   totalPointsIssued: number;
   totalCashbackRecorded: number;
+  customerScope?: CustomerScope;
+  awardType?: string;
+  targetAudienceSize?: number;
+  maxParticipations?: number;
+  maxPerCustomer?: number;
+  avgPointsPerParticipation?: number;
+  avgCashbackPerParticipation?: number;
+  avgParticipationsPerCustomer?: number;
+  audienceReachPct?: number | null;
+  participationCapPct?: number | null;
+  rewardCostPerParticipation?: number;
+}
+
+export interface CampaignParticipationTrendRow {
+  period: string;
+  participations: number;
+  pointsIssued: number;
+  cashbackRecorded: number;
+}
+
+export interface CampaignPerformanceRow {
+  campaignUid: string;
+  campaignName: string;
+  status: CampaignStatus;
+  customerScope?: CustomerScope;
+  awardType?: string;
+  validFrom?: string;
+  validUntil?: string;
+  budgetTotal: number;
+  budgetConsumed: number;
+  budgetConsumedPct: number;
+  budgetRemaining: number;
+  maxParticipations?: number;
+  maxPerCustomer?: number;
+  targetAudienceSize: number;
+  participationsInPeriod: number;
+  uniqueCustomersInPeriod: number;
+  pointsInPeriod: number;
+  cashbackInPeriod: number;
+  participationsAllTime: number;
+  uniqueCustomersAllTime: number;
+  avgPointsPerParticipation: number;
+  avgCashbackPerParticipation: number;
+  avgParticipationsPerCustomer: number;
+  audienceReachPct?: number | null;
+  participationCapPct?: number | null;
+  rewardCostPerParticipation: number;
+  periodOverPeriodChangePct?: number | null;
+  firstParticipationAt?: string;
+  lastParticipationAt?: string;
+}
+
+export interface CampaignPerformanceSummary {
+  programmeUid: string;
+  fromDate: string;
+  toDate: string;
+  totalCampaigns: number;
+  activeCampaigns: number;
+  participationsInPeriod: number;
+  participationsPriorPeriod: number;
+  uniqueCustomersInPeriod: number;
+  pointsInPeriod: number;
+  cashbackInPeriod: number;
+  totalBudgetAllocated: number;
+  totalBudgetConsumed: number;
+  periodOverPeriodChangePct?: number | null;
+}
+
+export interface CampaignPerformanceReportResponse {
+  summary: CampaignPerformanceSummary;
+  dailyParticipations: CampaignParticipationTrendRow[];
+  campaigns: CampaignPerformanceRow[];
 }
 
 export interface CampaignParticipationResponse {

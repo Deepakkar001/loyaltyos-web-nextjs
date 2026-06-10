@@ -63,3 +63,87 @@ export interface RuleEffectivenessRow {
   transactionCount: number;
   avgPointsPerMember: number;
 }
+
+export interface BreakageMonthlyRow {
+  month: string;
+  expiredPoints: number;
+  customersAffected: number;
+  transactionCount: number;
+}
+
+export interface BreakageTierRow {
+  tierName: string;
+  rankOrder: number;
+  expiredPoints: number;
+  customersAffected: number;
+}
+
+export interface UpcomingExpiryMonthRow {
+  expiryMonth: string;
+  pointsExpiring: number;
+  customersAffected: number;
+}
+
+export interface ExpiryJobRunRow {
+  batchDate: string;
+  status: string;
+  totalExpired: number | null;
+  customersAffected: number | null;
+  executedAt: string | null;
+}
+
+export interface BreakageExpiryReportResponse {
+  programmeUid: string;
+  fromDate: string;
+  toDate: string;
+  currency: string;
+  pointsCurrencyRate: number;
+  pointsExpiredInPeriod: number;
+  customersAffectedInPeriod: number;
+  expireTransactionCount: number;
+  monetaryBreakageInPeriod: number;
+  pointsExpiredYtd: number;
+  monetaryBreakageYtd: number;
+  outstandingPointsLiability: number;
+  outstandingMonetaryLiability: number;
+  pointsExpiringNext30Days: number;
+  pointsExpiringNext60Days: number;
+  pointsExpiringNext90Days: number;
+  monthlyBreakage: BreakageMonthlyRow[];
+  breakageByTier: BreakageTierRow[];
+  upcomingExpiryByMonth: UpcomingExpiryMonthRow[];
+  recentExpiryJobRuns: ExpiryJobRunRow[];
+}
+
+export interface EnrollmentTrendRow {
+  period: string;
+  newEnrollments: number;
+}
+
+export interface EnrollmentSourceRow {
+  sourceType: string;
+  newEnrollments: number;
+}
+
+export interface EnrollmentRuleRow {
+  ruleUid: string;
+  ruleName: string;
+  newEnrollments: number;
+}
+
+export interface EnrollmentReportResponse {
+  programmeUid: string;
+  fromDate: string;
+  toDate: string;
+  enrollmentDefinition: string;
+  newEnrollmentsInPeriod: number;
+  newEnrollmentsPriorPeriod: number;
+  totalEnrolledMembers: number;
+  returningActiveInPeriod: number;
+  newEnrollmentsYtd: number;
+  periodOverPeriodChangePct: number | null;
+  dailyNewEnrollments: EnrollmentTrendRow[];
+  monthlyNewEnrollments: EnrollmentTrendRow[];
+  enrollmentsBySource: EnrollmentSourceRow[];
+  topEnrollmentRules: EnrollmentRuleRow[];
+}

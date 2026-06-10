@@ -20,6 +20,9 @@ import {
   Settings,
   ShieldCheck,
   Star,
+  TicketPercent,
+  Timer,
+  UserPlus,
   User,
   Users,
   BookOpenText,
@@ -82,6 +85,8 @@ const MAIN_NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/setup/event-schema", label: "Event Schema", icon: DatabaseZap },
       { href: "/dashboard/setup/rewards-catalog", label: "Rewards Catalog", icon: Star },
       { href: "/dashboard/setup/voucher-programs", label: "Voucher Programs", icon: Star },
+      { href: "/dashboard/coupons", label: "Coupons", icon: TicketPercent },
+      { href: "/dashboard/coupons/analytics", label: "Coupon Analytics", icon: BarChart3 },
     ],
   },
   {
@@ -113,6 +118,8 @@ const MAIN_NAV_GROUPS: NavGroup[] = [
     label: "Analytics & Reports",
     items: [
       { href: "/dashboard/analytics/custom-reports", label: "Custom Reports", icon: BarChart3 },
+      { href: "/dashboard/analytics/enrollment", label: "Enrollment", icon: UserPlus },
+      { href: "/dashboard/analytics/breakage-expiry", label: "Breakage & Expiry", icon: Timer },
       { href: "/dashboard/analytics/export-data", label: "Export Data", icon: Download },
       { href: "/dashboard/analytics/segment-analysis", label: "Segment Analysis", icon: Users },
       { href: "/dashboard/analytics/cohort-analysis", label: "Cohort Analysis", icon: Layers },

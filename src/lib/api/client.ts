@@ -17,12 +17,19 @@ import {
   TenantRegistrationResponse,
   TenantStatusResponse,
 } from "@/types/onboarding";
+import type {
+  CouponCreateRequest,
+  CouponRedemptionListItem,
+  CouponResponse,
+  CouponUsageReportResponse,
+} from "@/types/coupon";
 import { getAccessToken, setAccessToken as setSessionAccessToken, clearSession } from "@/lib/auth/session";
-import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { EarnRuleDetailResponse, EarnRuleResponse, RuleChangeLogResponse, RuleStatus, RuleUpsertRequest } from "@/types/rules";
+import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import {
   CampaignEventSchemaUpsertRequest,
   CampaignParticipationResponse,
+  CampaignPerformanceReportResponse,
   CampaignResponse,
   CampaignStatsResponse,
   CampaignStatus,
@@ -32,7 +39,9 @@ import {
   CampaignUpsertRequest,
 } from "@/types/campaigns";
 import type {
+  BreakageExpiryReportResponse,
   CohortRetentionRow,
+  EnrollmentReportResponse,
   PointsActivityRow,
   RuleEffectivenessRow,
   RulePerformanceRow,
@@ -909,6 +918,21 @@ export const campaignsAdminApi = {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
+  getPerformanceReport: async (
+    programmeUid: string,
+    from: string,
+    to: string
+  ): Promise<CampaignPerformanceReportResponse> => {
+    try {
+      const res = await apiClient.get<CampaignPerformanceReportResponse>(
+        "/api/v1/campaigns/admin/reports/performance",
+        { params: { programmeUid, from, to } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
   listParticipations: async (campaignUid: string, limit = 50): Promise<CampaignParticipationResponse[]> => {
     try {
       const res = await apiClient.get<CampaignParticipationResponse[]>(
@@ -1085,6 +1109,36 @@ export const analyticsApi = {
       const res = await apiClient.get<RuleEffectivenessRow[]>("/api/v1/analytics/cohorts/rule-effectiveness", {
         params: { ruleUid, from, to, programmeUid },
       });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getBreakageExpiryReport: async (
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<BreakageExpiryReportResponse> => {
+    try {
+      const res = await apiClient.get<BreakageExpiryReportResponse>(
+        "/api/v1/analytics/reports/breakage-expiry",
+        { params: { from, to, programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getEnrollmentReport: async (
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<EnrollmentReportResponse> => {
+    try {
+      const res = await apiClient.get<EnrollmentReportResponse>(
+        "/api/v1/analytics/reports/enrollment",
+        { params: { from, to, programmeUid } }
+      );
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);
@@ -1391,6 +1445,71 @@ export type ReferralTopReferrer = {
   referrerCustomerId: string;
   referralCount: number;
   rewardedCount: number;
+  totalRefereeSpend?: number;
+  pointsEarned?: number;
+  conversionRatePercent?: number;
+};
+
+export type ReferralPeriodMetrics = {
+  totalReferrals: number;
+  signedUp: number;
+  rewarded: number;
+  pending: number;
+  fraudFlagged: number;
+  rejected: number;
+  withPurchase: number;
+  totalRefereeSpend: number;
+  totalRewardPoints: number;
+  conversionRatePercent: number;
+  signupRatePercent: number;
+  purchaseRatePercent: number;
+};
+
+export type ReferralFunnelStage = {
+  stage: string;
+  count: number;
+  sharePercent: number;
+};
+
+export type ReferralEffectivenessTrendRow = {
+  periodStart: string;
+  referrals: number;
+  signedUp: number;
+  rewarded: number;
+  conversionRatePercent: number;
+  refereeSpend: number;
+};
+
+export type ReferralProgrammeComparisonRow = {
+  programmeUid: string;
+  programmeName: string;
+  totalReferrals: number;
+  rewarded: number;
+  conversionRatePercent: number;
+  totalRefereeSpend: number;
+  totalRewardPoints: number;
+};
+
+export type ReferralEffectivenessReport = {
+  programmeUid: string;
+  fromDate: string;
+  toDate: string;
+  currency: string;
+  periodMetrics: ReferralPeriodMetrics;
+  priorPeriodMetrics: ReferralPeriodMetrics;
+  periodOverPeriodReferralsChangePct?: number | null;
+  periodOverPeriodRewardedChangePct?: number | null;
+  periodOverPeriodConversionChangePts?: number;
+  rewardCostInCurrency: number;
+  revenuePerRewardCurrency: number;
+  netRefereeValue: number;
+  avgPointsPerRewardedReferral: number;
+  costPerRewardedReferralPoints: number;
+  timeToFirstPurchase: ReferralTimeToPurchase;
+  funnel: ReferralFunnelStage[];
+  dailyTrends: ReferralEffectivenessTrendRow[];
+  topReferrers: ReferralTopReferrer[];
+  programmeComparisons: ReferralProgrammeComparisonRow[];
 };
 
 export type ReferralTimeToPurchase = {
@@ -1542,6 +1661,21 @@ export const referralApi = {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
+  getEffectivenessReport: async (
+    programmeUid: string,
+    from: string,
+    to: string
+  ): Promise<ReferralEffectivenessReport> => {
+    try {
+      const res = await apiClient.get<ReferralEffectivenessReport>(
+        "/api/v1/me/referrals/analytics/effectiveness-report",
+        { params: { programmeUid, from, to } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
 };
 
 export const voucherDenominationApi = {
@@ -1569,6 +1703,80 @@ export const voucherDenominationApi = {
         "/api/v1/me/vouchers/denominations",
         { catalogRewardUid, mappings },
         { params: { programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+};
+
+export const couponApi = {
+  list: async (programmeUid?: string): Promise<CouponResponse[]> => {
+    try {
+      const res = await apiClient.get<CouponResponse[]>("/api/v1/me/coupons", {
+        params: { programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  get: async (couponUid: string): Promise<CouponResponse> => {
+    try {
+      const res = await apiClient.get<CouponResponse>(`/api/v1/me/coupons/${encodeURIComponent(couponUid)}`);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  create: async (body: CouponCreateRequest): Promise<CouponResponse> => {
+    try {
+      const res = await apiClient.post<CouponResponse>("/api/v1/me/coupons", body);
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  activate: async (couponUid: string): Promise<CouponResponse> => {
+    try {
+      const res = await apiClient.post<CouponResponse>(
+        `/api/v1/me/coupons/${encodeURIComponent(couponUid)}/activate`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  revoke: async (couponUid: string): Promise<CouponResponse> => {
+    try {
+      const res = await apiClient.post<CouponResponse>(
+        `/api/v1/me/coupons/${encodeURIComponent(couponUid)}/revoke`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  redemptions: async (couponUid: string): Promise<CouponRedemptionListItem[]> => {
+    try {
+      const res = await apiClient.get<CouponRedemptionListItem[]>(
+        `/api/v1/me/coupons/${encodeURIComponent(couponUid)}/redemptions`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getUsageReport: async (
+    programmeUid: string,
+    from: string,
+    to: string
+  ): Promise<CouponUsageReportResponse> => {
+    try {
+      const res = await apiClient.get<CouponUsageReportResponse>(
+        "/api/v1/me/coupons/analytics/usage-report",
+        { params: { programmeUid, from, to } }
       );
       return res.data;
     } catch (err) {

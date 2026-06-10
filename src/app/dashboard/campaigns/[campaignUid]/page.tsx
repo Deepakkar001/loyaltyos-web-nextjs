@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CampaignBudgetProgress } from "@/components/campaigns/CampaignBudgetProgress";
 import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge";
 import { CampaignTargetAudiencePanel } from "@/components/campaigns/CampaignTargetAudiencePanel";
 import { campaignsAdminApi } from "@/lib/api/client";
@@ -197,23 +198,66 @@ export default function CampaignDetailPage() {
       ) : null}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="p-4 border-border/70 bg-[var(--surface-card)]">
-          <p className="text-xs text-muted-foreground">Points issued</p>
-          <p className="text-lg font-semibold mt-1">{stats.totalPointsIssued}</p>
-        </Card>
-        <Card className="p-4 border-border/70 bg-[var(--surface-card)]">
-          <p className="text-xs text-muted-foreground">Cashback recorded</p>
-          <p className="text-lg font-semibold mt-1">{stats.totalCashbackRecorded}</p>
-        </Card>
-        <Card className="p-4 border-border/70 bg-[var(--surface-card)]">
-          <p className="text-xs text-muted-foreground">Participations</p>
-          <p className="text-lg font-semibold mt-1">{stats.totalParticipations}</p>
-        </Card>
-        <Card className="p-4 border-border/70 bg-[var(--surface-card)]">
-          <p className="text-xs text-muted-foreground">Budget used</p>
-          <p className="text-lg font-semibold mt-1">{stats.budgetConsumedPct}%</p>
-        </Card>
+        <StatCard label="Points issued" value={stats.totalPointsIssued} />
+        <StatCard label="Cashback recorded" value={stats.totalCashbackRecorded} />
+        <StatCard label="Participations" value={stats.totalParticipations} sub={`${stats.uniqueCustomersReached} unique customers`} />
+        <StatCard
+          label="Budget used"
+          value={`${stats.budgetConsumedPct}%`}
+          sub={`${stats.budgetConsumed} / ${stats.budgetTotal} remaining ${stats.budgetRemaining}`}
+        />
       </div>
+
+      <Card className="p-5 border-border/70 bg-[var(--surface-card)] space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">Performance insights</h2>
+          <p className="text-xs text-muted-foreground mt-1">All-time metrics from live participation records.</p>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Insight label="Avg points / participation" value={stats.avgPointsPerParticipation ?? 0} />
+          <Insight label="Avg cashback / participation" value={stats.avgCashbackPerParticipation ?? 0} />
+          <Insight label="Participations / customer" value={stats.avgParticipationsPerCustomer ?? 0} />
+          <Insight
+            label="Reward cost / participation"
+            value={stats.rewardCostPerParticipation ?? 0}
+            sub="Budget consumed ÷ participations"
+          />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4 pt-2">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Budget consumption</p>
+            <CampaignBudgetProgress consumedPct={stats.budgetConsumedPct} className="max-w-md" />
+          </div>
+          <div className="text-sm space-y-1">
+            {stats.customerScope === "TARGETED" && stats.audienceReachPct != null ? (
+              <p>
+                <span className="text-muted-foreground">Target list reach:</span>{" "}
+                <span className="font-medium">{stats.audienceReachPct.toFixed(1)}%</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  ({stats.uniqueCustomersReached} of {stats.targetAudienceSize ?? campaign.customerCount ?? 0})
+                </span>
+              </p>
+            ) : null}
+            {stats.participationCapPct != null ? (
+              <p>
+                <span className="text-muted-foreground">Participation cap:</span>{" "}
+                <span className="font-medium">{stats.participationCapPct.toFixed(1)}%</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  ({stats.totalParticipations} of {stats.maxParticipations})
+                </span>
+              </p>
+            ) : null}
+            {stats.awardType ? (
+              <p>
+                <span className="text-muted-foreground">Award type:</span>{" "}
+                <span className="font-medium">{stats.awardType.replaceAll("_", " ").toLowerCase()}</span>
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
       <Card className="p-5 border-border/70 bg-[var(--surface-card)] space-y-4">
         <div>
@@ -248,6 +292,7 @@ export default function CampaignDetailPage() {
                 <tr className="text-left text-muted-foreground border-b border-border/50">
                   <th className="py-2 pr-4">Customer</th>
                   <th className="py-2 pr-4">Event</th>
+                  <th className="py-2 pr-4">When</th>
                   <th className="py-2 pr-4">Points</th>
                   <th className="py-2">Cashback</th>
                 </tr>
@@ -257,6 +302,9 @@ export default function CampaignDetailPage() {
                   <tr key={`${p.customerId}-${p.eventId}`} className="border-b border-border/30">
                     <td className="py-2 pr-4">{p.customerId}</td>
                     <td className="py-2 pr-4">{p.eventId}</td>
+                    <td className="py-2 pr-4 text-muted-foreground">
+                      {p.participatedAt ? new Date(p.participatedAt).toLocaleString() : "—"}
+                    </td>
                     <td className="py-2 pr-4">{p.pointsAwarded ?? 0}</td>
                     <td className="py-2">{p.cashbackAmount ?? 0}</td>
                   </tr>
@@ -266,6 +314,26 @@ export default function CampaignDetailPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return (
+    <Card className="p-4 border-border/70 bg-[var(--surface-card)]">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-lg font-semibold mt-1">{value}</p>
+      {sub ? <p className="text-xs text-muted-foreground mt-1">{sub}</p> : null}
+    </Card>
+  );
+}
+
+function Insight({ label, value, sub }: { label: string; value: number; sub?: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-lg font-semibold mt-1">{value}</p>
+      {sub ? <p className="text-xs text-muted-foreground mt-1">{sub}</p> : null}
     </div>
   );
 }
