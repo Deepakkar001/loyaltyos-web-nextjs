@@ -14,6 +14,7 @@ import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { STATUS_TO_STEP } from "@/types/onboarding";
+import { useUserStore } from "@/lib/store/user-store";
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
   password: z.string().min(1, "Password is required"),
@@ -26,6 +27,7 @@ export default function LoginPage() {
   const { setTenantId, setRegistrationData, setAccessToken, syncStatusFromBackend } =
     useOnboardingStore();
   const [showPassword, setShowPassword] = useState(false);
+  const { setFullName } = useUserStore();
 
   const {
     register,
@@ -46,8 +48,9 @@ export default function LoginPage() {
       setTenantId(res.tenantId);
       setRegistrationData({ email: res.email });
       syncStatusFromBackend(res.onboardingStatus);
-
-      toast.success(`Welcome back, ${res.email.split("@")[0].charAt(0).toUpperCase() + res.email.split("@")[0].slice(1)}!`);
+      setFullName(res.fullName);
+      const welcomeName = res.fullName?.trim();
+      toast.success(`Welcome back, ${welcomeName || "there"}!`);
       // Route immediately to the right destination to avoid showing onboarding steps briefly.
       // Guided Setup Progress routing:
       // AGREEMENT_SIGNED → Configure

@@ -411,6 +411,7 @@ export interface LoginResponse {
   expiresInSeconds: number;
   tenantId: string;
   email: string;
+  fullName: string | null;
   onboardingStatus: OnboardingStatus;
   latestAgreementStatus: AgreementStatus | null;
 }
