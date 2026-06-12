@@ -39,7 +39,12 @@ import {
   CampaignUpsertRequest,
 } from "@/types/campaigns";
 import type {
+  AccrualRedemptionReconciliationResponse,
   BreakageExpiryReportResponse,
+  FailedAccrualRedemptionReportResponse,
+  LiabilityReportResponse,
+  ReversalsAdjustmentsReportResponse,
+  SlaPerformanceReportResponse,
   CohortRetentionRow,
   EnrollmentReportResponse,
   PointsActivityRow,
@@ -255,6 +260,17 @@ export const onboardingApi = {
       await apiClient.post("/api/v1/auth/logout", {});
     } catch {
       // Best effort; still clear local state on client side.
+    }
+  },
+  acceptInvite: async (email: string, token: string, password: string): Promise<LoginResponse> => {
+    try {
+      const res: AxiosResponse<LoginResponse> = await apiClient.post(
+        "/api/v1/auth/accept-invite",
+        { email, token, password }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
   /** Metadata — dropdown values for onboarding UI */
@@ -1137,6 +1153,80 @@ export const analyticsApi = {
     try {
       const res = await apiClient.get<EnrollmentReportResponse>(
         "/api/v1/analytics/reports/enrollment",
+        { params: { from, to, programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getAccrualRedemptionReconciliation: async (
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<AccrualRedemptionReconciliationResponse> => {
+    try {
+      const res = await apiClient.get<AccrualRedemptionReconciliationResponse>(
+        "/api/v1/analytics/reports/accrual-redemption-reconciliation",
+        { params: { from, to, programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getLiabilityReport: async (
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<LiabilityReportResponse> => {
+    try {
+      const res = await apiClient.get<LiabilityReportResponse>("/api/v1/analytics/reports/liability", {
+        params: { from, to, programmeUid },
+      });
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getFailedAccrualsRedemptionsReport: async (
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<FailedAccrualRedemptionReportResponse> => {
+    try {
+      const res = await apiClient.get<FailedAccrualRedemptionReportResponse>(
+        "/api/v1/analytics/reports/failed-accruals-redemptions",
+        { params: { from, to, programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getReversalsAdjustmentsReport: async (
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<ReversalsAdjustmentsReportResponse> => {
+    try {
+      const res = await apiClient.get<ReversalsAdjustmentsReportResponse>(
+        "/api/v1/analytics/reports/reversals-adjustments",
+        { params: { from, to, programmeUid } }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  getSlaPerformanceReport: async (
+    from: string,
+    to: string,
+    programmeUid = "default"
+  ): Promise<SlaPerformanceReportResponse> => {
+    try {
+      const res = await apiClient.get<SlaPerformanceReportResponse>(
+        "/api/v1/analytics/reports/sla-performance",
         { params: { from, to, programmeUid } }
       );
       return res.data;

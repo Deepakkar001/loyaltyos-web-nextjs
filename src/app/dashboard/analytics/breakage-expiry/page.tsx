@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAnalyticsProgramme } from "@/lib/analytics/analytics-programme-context";
 import { lastNDaysRange } from "@/lib/analytics/date-range";
+import { AnalyticsExportButton } from "@/components/analytics/analytics-export-button";
+import { reportFilename } from "@/lib/analytics/export-csv";
 import { analyticsApi } from "@/lib/api/client";
 import type { BreakageExpiryReportResponse } from "@/types/analytics";
 
@@ -174,6 +176,12 @@ export default function BreakageExpiryReportPage() {
           <Button onClick={() => void load()} disabled={loading}>
             {loading ? "Loading…" : "Apply"}
           </Button>
+          <AnalyticsExportButton
+            exportPath="breakage-expiry"
+            params={{ from, to, programmeUid }}
+            filename={reportFilename("breakage-expiry", programmeUid, from, to)}
+            disabled={loading}
+          />
         </div>
       </AnalyticsPanel>
 

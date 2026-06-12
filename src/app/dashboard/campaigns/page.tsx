@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Authorize } from "@/components/access/authorize";
 import { campaignsAdminApi, programmeApiV2 } from "@/lib/api/client";
 import { formatCustomerScopeLabel } from "@/lib/campaigns/campaign-form";
 import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
@@ -158,9 +159,13 @@ export default function CampaignsListPage() {
           <h1 className="text-2xl font-bold tracking-tight">Campaigns</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage loyalty campaigns across programmes.</p>
         </div>
-        <Link href="/dashboard/campaigns/create">
-          <Button className="rounded-full shrink-0">+ Create Campaign</Button>
-        </Link>
+        <Authorize permission="campaigns.create">
+        <Authorize permission="campaigns.create">
+          <Link href="/dashboard/campaigns/create">
+            <Button className="rounded-full shrink-0">+ Create Campaign</Button>
+          </Link>
+        </Authorize>
+        </Authorize>
       </div>
 
       <Card className="p-4 border-border/70 bg-[var(--surface-card)] space-y-4">
@@ -245,9 +250,13 @@ export default function CampaignsListPage() {
         <Card className="p-8 border-border/70 bg-[var(--surface-card)]">
           <p className="text-sm font-semibold">No campaigns found</p>
           <p className="text-sm text-muted-foreground mt-1">Create a campaign or adjust your filters.</p>
-          <Link href="/dashboard/campaigns/create" className="inline-block mt-4">
-            <Button className="rounded-full">Create Campaign</Button>
-          </Link>
+          <Authorize permission="campaigns.create">
+          <Authorize permission="campaigns.create">
+            <Link href="/dashboard/campaigns/create" className="inline-block mt-4">
+              <Button className="rounded-full">Create Campaign</Button>
+            </Link>
+          </Authorize>
+          </Authorize>
         </Card>
       ) : (
         <Card className="border-border/70 bg-[var(--surface-card)] overflow-hidden">

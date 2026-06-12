@@ -19,7 +19,9 @@ import {
   YAxis,
 } from "recharts";
 
+import { ApiExportButton } from "@/components/analytics/analytics-export-button";
 import { Button } from "@/components/ui/button";
+import { reportFilename } from "@/lib/analytics/export-csv";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -191,6 +193,12 @@ export default function CouponAnalyticsPage() {
           <Button onClick={() => void load()} disabled={loading || !programmeUid}>
             {loading ? "Loading…" : "Apply"}
           </Button>
+          <ApiExportButton
+            apiUrl="/api/v1/me/coupons/analytics/usage-report/export"
+            params={{ programmeUid, from, to }}
+            filename={reportFilename("coupon-usage", programmeUid, from, to)}
+            disabled={loading || !programmeUid}
+          />
         </div>
       </Card>
 

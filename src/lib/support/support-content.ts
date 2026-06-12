@@ -123,6 +123,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   VOUCHERS: "Vouchers & catalog",
   BILLING: "Billing & subscription",
   GO_LIVE: "Go-live & onboarding",
+  MODULE_ACCESS_REQUEST: "Module access request",
   OTHER: "Other",
 };
 

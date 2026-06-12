@@ -25,7 +25,9 @@ export default function TenantDetailPage() {
   const [tenant, setTenant] = useState<AdminTenantDetail | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "agreements" | "contacts" | "activity">("overview");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "agreements" | "contacts" | "activity" | "modules"
+  >("overview");
 
   const fetchData = useCallback(async () => {
     try {
@@ -70,6 +72,7 @@ export default function TenantDetailPage() {
     { id: "agreements" as const, label: `Agreements (${tenant.agreements.length})` },
     { id: "contacts" as const, label: `Contacts (${tenant.contacts.length})` },
     { id: "activity" as const, label: `Activity (${auditLogs.length})` },
+    { id: "modules" as const, label: "Modules" },
   ];
 
   return (
@@ -124,6 +127,94 @@ export default function TenantDetailPage() {
       {activeTab === "agreements" && <AgreementsTab agreements={tenant.agreements} />}
       {activeTab === "contacts" && <ContactsTab contacts={tenant.contacts} />}
       {activeTab === "activity" && <ActivityTab logs={auditLogs} />}
+      {activeTab === "modules" && <ModulesTab tenantId={tenantId} />}
+    </div>
+  );
+}
+
+function ModulesTab({ tenantId }: { tenantId: string }) {
+  const [modules, setModules] = useState<import("@/types/access").ModuleCatalogItemDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await adminApi.getTenantModules(tenantId);
+        if (alive) setModules(data);
+      } catch {
+        toast.error("Failed to load modules");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const toggle = (moduleKey: string, locked?: boolean) => {
+    if (locked) return;
+    setModules((prev) =>
+      prev.map((m) =>
+        m.moduleKey === moduleKey ? { ...m, enabled: !m.enabled } : m
+      )
+    );
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const enabled = modules.filter((m) => m.enabled).map((m) => m.moduleKey);
+      const updated = await adminApi.updateTenantModules(tenantId, enabled);
+      setModules(updated);
+      toast.success("Module entitlements updated");
+    } catch {
+      toast.error("Failed to update modules");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
+      <p className="text-sm text-slate-400">
+        Enable or disable product modules for this tenant. Required modules cannot be turned off.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {modules.map((m) => (
+          <label
+            key={m.moduleKey}
+            className="flex items-center gap-3 rounded-lg border border-slate-700 px-4 py-3 cursor-pointer"
+          >
+            <input
+              type="checkbox"
+              checked={!!m.enabled}
+              disabled={m.locked || m.required}
+              onChange={() => toggle(m.moduleKey, m.locked || m.required)}
+              className="rounded"
+            />
+            <span className="text-sm text-slate-200">{m.displayName}</span>
+          </label>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => void save()}
+        disabled={saving}
+        className="px-4 py-2 rounded-lg bg-amber-500 text-slate-900 text-sm font-medium disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save modules"}
+      </button>
     </div>
   );
 }

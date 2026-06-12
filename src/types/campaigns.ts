@@ -81,6 +81,7 @@ export interface CampaignResponse {
   maxPerCustomer?: number;
   globalRewardCap?: number;
   merchantId?: string;
+  pendingMerchantApproval?: boolean;
   validFrom: string;
   validUntil: string;
   createdBy?: string;

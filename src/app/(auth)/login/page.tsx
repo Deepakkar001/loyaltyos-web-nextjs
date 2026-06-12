@@ -59,7 +59,13 @@ export default function LoginPage() {
       // SANDBOX_TESTING → Go Live
       // ACTIVE → Dashboard
       if (res.onboardingStatus === "AGREEMENT_SIGNED") {
-        router.replace("/dashboard/configure");
+        try {
+          const { accessApi } = await import("@/lib/access/access-api");
+          const catalog = await accessApi.getModuleCatalog();
+          router.replace(catalog.modulesConfigured ? "/dashboard/configure" : "/onboarding");
+        } catch {
+          router.replace("/onboarding");
+        }
         return;
       }
       if (res.onboardingStatus === "CONFIGURED") {

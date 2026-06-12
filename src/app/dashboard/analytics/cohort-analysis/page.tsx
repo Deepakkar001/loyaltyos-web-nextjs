@@ -9,14 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAnalyticsProgramme } from "@/lib/analytics/analytics-programme-context";
+import { AnalyticsExportButton } from "@/components/analytics/analytics-export-button";
+import { reportFilename } from "@/lib/analytics/export-csv";
 import { analyticsApi, loyaltyRulesAdminApi } from "@/lib/api/client";
 import { lastNDaysRange } from "@/lib/analytics/date-range";
 import { fetchAnalyticsOrEmpty } from "@/lib/analytics/safe-fetch";
@@ -87,11 +82,19 @@ function RetentionTab() {
 
   return (
     <AnalyticsPanel className="overflow-x-auto">
-      <AnalyticsSectionHeading
-        title="Monthly retention heatmap"
-        titleClassName="text-base font-semibold"
-        helpText="Heatmap table: rows are acquisition cohorts (month of first CREDIT); columns are months since join (M0, M1, …). Cell colour and value show retention % — share of cohort members who transacted again that month."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <AnalyticsSectionHeading
+          title="Monthly retention heatmap"
+          titleClassName="text-base font-semibold"
+          helpText="Heatmap table: rows are acquisition cohorts (month of first CREDIT); columns are months since join (M0, M1, …). Cell colour and value show retention % — share of cohort members who transacted again that month."
+        />
+        <AnalyticsExportButton
+          exportPath="cohort-retention"
+          params={{ programmeUid }}
+          filename={reportFilename("cohort-retention", programmeUid)}
+          disabled={loading}
+        />
+      </div>
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr>
@@ -199,11 +202,19 @@ function TierUpgradeTab() {
   return (
     <div className="space-y-6">
       <AnalyticsPanel className="overflow-x-auto">
-        <AnalyticsSectionHeading
-          title="Tier upgrade by acquisition cohort"
-          titleClassName="text-base font-semibold"
-          helpText="Each row is an acquisition cohort (month of first points earned). Upgrade % and days-to-tier use tier_history when a member's balance crosses into rank 2+ tiers (e.g. Gold, Platinum). The base tier (rank 1) is assigned at zero balance and is not counted as an upgrade."
-        />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <AnalyticsSectionHeading
+            title="Tier upgrade by acquisition cohort"
+            titleClassName="text-base font-semibold"
+            helpText="Each row is an acquisition cohort (month of first points earned). Upgrade % and days-to-tier use tier_history when a member's balance crosses into rank 2+ tiers (e.g. Gold, Platinum). The base tier (rank 1) is assigned at zero balance and is not counted as an upgrade."
+          />
+          <AnalyticsExportButton
+            exportPath="cohort-tier-upgrade"
+            params={{ programmeUid }}
+            filename={reportFilename("cohort-tier-upgrade", programmeUid)}
+            disabled={loading}
+          />
+        </div>
         {cohortEmptyMessage ? (
           <EmptyPanel message={cohortEmptyMessage} />
         ) : (
@@ -241,16 +252,25 @@ function TierUpgradeTab() {
             titleClassName="text-base font-semibold"
             helpText="Bar chart: X-axis is days-from-first-earn bucket (0–7, 8–14, etc.); Y-axis is member count who reached the selected tier in that window. Use the dropdown to switch target tier."
           />
-          {upgradeTiers.length > 0 ? (
-            <NativeSelect
-              ariaLabel="Target tier"
-              value={tierName}
-              onChange={setTierName}
-              className="w-[160px]"
-              variant="compact"
-              options={upgradeTiers.map((t) => ({ value: t.tierName, label: t.tierName }))}
-            />
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {upgradeTiers.length > 0 ? (
+              <NativeSelect
+                ariaLabel="Target tier"
+                value={tierName}
+                onChange={setTierName}
+                className="w-[160px]"
+                variant="compact"
+                options={upgradeTiers.map((t) => ({ value: t.tierName, label: t.tierName }))}
+              />
+            ) : null}
+            {tierName ? (
+              <AnalyticsExportButton
+                exportPath="cohort-tier-velocity"
+                params={{ programmeUid, tierName }}
+                filename={reportFilename(`cohort-tier-velocity-${tierName}`, programmeUid)}
+              />
+            ) : null}
+          </div>
         </div>
         {upgradeTiers.length === 0 ? (
           <EmptyPanel message="No upgrade tiers configured (rank 2+). Add tiers in Configure Programme." />
@@ -317,20 +337,22 @@ function RuleEffectivenessTab() {
       <AnalyticsPanel>
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Filters</p>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1 min-w-[200px]">
-            <label className="text-xs text-muted-foreground">Rule</label>
-            <Select value={ruleUid} onValueChange={(v) => v && setRuleUid(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select rule" />
-              </SelectTrigger>
-              <SelectContent>
-                {rules.map((r) => (
-                  <SelectItem key={r.ruleUid} value={r.ruleUid}>
-                    {r.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-1 min-w-[240px]">
+            <label htmlFor="cohort-rule-select" className="text-xs text-muted-foreground">
+              Rule
+            </label>
+            <NativeSelect
+              id="cohort-rule-select"
+              ariaLabel="Earn rule"
+              value={ruleUid}
+              onChange={setRuleUid}
+              disabled={rules.length === 0}
+              options={
+                rules.length === 0
+                  ? [{ value: "", label: "No rules available" }]
+                  : rules.map((r) => ({ value: r.ruleUid, label: r.name }))
+              }
+            />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">From</label>
@@ -343,6 +365,12 @@ function RuleEffectivenessTab() {
           <Button onClick={() => void load()} disabled={loading || !ruleUid}>
             Apply
           </Button>
+          <AnalyticsExportButton
+            exportPath="cohort-rule-effectiveness"
+            params={{ from, to, programmeUid, ruleUid }}
+            filename={reportFilename(`cohort-rule-effectiveness-${ruleUid}`, programmeUid, from, to)}
+            disabled={loading || !ruleUid}
+          />
         </div>
       </AnalyticsPanel>
 

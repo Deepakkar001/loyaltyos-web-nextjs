@@ -8,6 +8,8 @@ import { AnalyticsPanel, AnalyticsStatCard } from "@/components/analytics/analyt
 import { AnalyticsSectionHeading } from "@/components/analytics/analytics-section-heading";
 import { Button } from "@/components/ui/button";
 import { useAnalyticsProgramme } from "@/lib/analytics/analytics-programme-context";
+import { AnalyticsExportButton } from "@/components/analytics/analytics-export-button";
+import { reportFilename } from "@/lib/analytics/export-csv";
 import { analyticsApi } from "@/lib/api/client";
 import { fetchAnalyticsOrEmpty } from "@/lib/analytics/safe-fetch";
 import type { SegmentAnalysisRow } from "@/types/analytics";
@@ -58,10 +60,18 @@ export default function SegmentAnalysisPage() {
           title="Engagement segments"
           helpText="Pie chart: each slice is an engagement segment (ACTIVE, AT_RISK, DORMANT) versus member count. Segments are based on days since the member's last ledger transaction — ACTIVE ≤30 days, AT_RISK 31–90 days, DORMANT over 90 days."
         />
-        <p className="text-xs text-muted-foreground -mt-2">
-          Active, at-risk, and dormant members by last transaction.
-        </p>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 -mt-2">
+          <p className="text-xs text-muted-foreground">
+            Active, at-risk, and dormant members by last transaction.
+          </p>
+          <AnalyticsExportButton
+            exportPath="segment-analysis"
+            params={{ programmeUid }}
+            filename={reportFilename("segment-analysis", programmeUid)}
+            disabled={loading}
+          />
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
           <div className="rounded-xl border border-border/70 bg-background/30 p-4 min-h-[16rem]">
             {loading ? (
               <div className="h-64 bg-muted/40 animate-pulse rounded-xl border border-border/50" />

@@ -38,6 +38,7 @@ const CATEGORY_OPTIONS: Array<{ value: SupportCaseCategory; label: string }> = [
   { value: "VOUCHERS", label: CATEGORY_LABELS.VOUCHERS },
   { value: "BILLING", label: CATEGORY_LABELS.BILLING },
   { value: "GO_LIVE", label: CATEGORY_LABELS.GO_LIVE },
+  { value: "MODULE_ACCESS_REQUEST", label: CATEGORY_LABELS.MODULE_ACCESS_REQUEST },
   { value: "OTHER", label: CATEGORY_LABELS.OTHER },
 ];
 

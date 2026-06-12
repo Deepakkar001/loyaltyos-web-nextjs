@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Eye, Trash2 } from "lucide-react";
 
+import { Authorize } from "@/components/access/authorize";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RuleStatusBadge } from "@/components/loyalty-rules/RuleStatusBadge";
@@ -207,14 +208,18 @@ export default function MyRulesPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/dashboard/loyalty-rules/create/basic-info?new=1">
-            <Button variant="outline" className="rounded-full">
-              + Programme Rule
-            </Button>
-          </Link>
-          <Link href="/dashboard/campaign-rules/create/campaign?new=1">
-            <Button className="rounded-full">+ Campaign Rule</Button>
-          </Link>
+          <Authorize permission="loyalty_rules.create">
+            <Link href="/dashboard/loyalty-rules/create/basic-info?new=1">
+              <Button variant="outline" className="rounded-full">
+                + Programme Rule
+              </Button>
+            </Link>
+          </Authorize>
+          <Authorize permission="loyalty_rules.create">
+            <Link href="/dashboard/campaign-rules/create/campaign?new=1">
+              <Button className="rounded-full">+ Campaign Rule</Button>
+            </Link>
+          </Authorize>
         </div>
       </div>
 
@@ -337,15 +342,17 @@ function RuleListCard({
             </Button>
           </Link>
           {rule.status !== "ARCHIVED" ? (
-            <Button
-              variant="outline"
-              className="rounded-full whitespace-nowrap text-destructive hover:text-destructive"
-              size="sm"
-              onClick={onRemove}
-            >
-              <Trash2 className="w-3.5 h-3.5 mr-2 shrink-0" />
-              Remove
-            </Button>
+            <Authorize permission="loyalty_rules.delete">
+              <Button
+                variant="outline"
+                className="rounded-full whitespace-nowrap text-destructive hover:text-destructive"
+                size="sm"
+                onClick={onRemove}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-2 shrink-0" />
+                Remove
+              </Button>
+            </Authorize>
           ) : null}
         </div>
       </div>

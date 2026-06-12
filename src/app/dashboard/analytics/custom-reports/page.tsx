@@ -19,6 +19,8 @@ import { AnalyticsSectionHeading } from "@/components/analytics/analytics-sectio
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAnalyticsProgramme } from "@/lib/analytics/analytics-programme-context";
+import { AnalyticsExportButton } from "@/components/analytics/analytics-export-button";
+import { reportFilename } from "@/lib/analytics/export-csv";
 import { analyticsApi } from "@/lib/api/client";
 import { lastNDaysRange } from "@/lib/analytics/date-range";
 import { fetchAnalyticsOrEmpty } from "@/lib/analytics/safe-fetch";
@@ -98,6 +100,12 @@ export default function CustomReportsPage() {
           <Button onClick={() => void load()} disabled={loading}>
             {loading ? "Loading…" : "Apply"}
           </Button>
+          <AnalyticsExportButton
+            exportPath="custom-reports"
+            params={{ from, to, programmeUid }}
+            filename={reportFilename("custom-reports", programmeUid, from, to)}
+            disabled={loading}
+          />
         </div>
       </AnalyticsPanel>
 

@@ -13,6 +13,7 @@ import {
 } from "@/types/onboarding";
 import { getApiBaseUrl } from "@/lib/api/get-api-base-url";
 import type { SupportCase, SupportCaseStatus } from "@/lib/api/support";
+import type { ModuleCatalogItemDto } from "@/types/access";
 
 const adminClient = axios.create({
   baseURL: getApiBaseUrl(),
@@ -278,6 +279,32 @@ export const adminApi = {
       const res = await adminClient.patch<SupportCase>(
         `/api/v1/admin/support/cases/${encodeURIComponent(caseUid)}/status`,
         { status }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  getTenantModules: async (tenantId: string): Promise<ModuleCatalogItemDto[]> => {
+    try {
+      const res = await adminClient.get<ModuleCatalogItemDto[]>(
+        `/api/v1/admin/dashboard/tenants/${encodeURIComponent(tenantId)}/modules`
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+
+  updateTenantModules: async (
+    tenantId: string,
+    enabledModuleKeys: string[]
+  ): Promise<ModuleCatalogItemDto[]> => {
+    try {
+      const res = await adminClient.put<ModuleCatalogItemDto[]>(
+        `/api/v1/admin/dashboard/tenants/${encodeURIComponent(tenantId)}/modules`,
+        { enabledModuleKeys }
       );
       return res.data;
     } catch (err) {

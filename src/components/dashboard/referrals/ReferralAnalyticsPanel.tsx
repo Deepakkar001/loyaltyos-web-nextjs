@@ -17,8 +17,10 @@ import {
   YAxis,
 } from "recharts";
 
+import { ApiExportButton } from "@/components/analytics/analytics-export-button";
 import { ReferralSectionShell } from "@/components/dashboard/referrals/ReferralSectionShell";
 import { Button } from "@/components/ui/button";
+import { reportFilename } from "@/lib/analytics/export-csv";
 import { Input } from "@/components/ui/input";
 import { lastNDaysRange } from "@/lib/analytics/date-range";
 import { referralApi, type ReferralEffectivenessReport } from "@/lib/api/client";
@@ -169,6 +171,12 @@ export function ReferralAnalyticsPanel() {
             <Input id="referral-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           <Button onClick={() => void load()} disabled={loading}>{loading ? "Loading…" : "Apply"}</Button>
+          <ApiExportButton
+            apiUrl="/api/v1/me/referrals/analytics/effectiveness-report/export"
+            params={{ programmeUid, from, to }}
+            filename={reportFilename("referral-effectiveness", programmeUid, from, to)}
+            disabled={loading}
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

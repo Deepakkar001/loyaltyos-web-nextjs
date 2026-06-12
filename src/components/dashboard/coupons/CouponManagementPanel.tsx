@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Plus, RefreshCw, TicketPercent } from "lucide-react";
 
+import { Authorize } from "@/components/access/authorize";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -246,10 +247,14 @@ export function CouponManagementPanel() {
             <RefreshCw className={cn("h-4 w-4 mr-1", loading && "animate-spin")} />
             Refresh
           </Button>
-          <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Create coupon
-          </Button>
+          <Authorize permission="coupons.create">
+          <Authorize permission="coupons.create">
+            <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+              <Plus className="h-4 w-4 mr-1" />
+              Create coupon
+            </Button>
+          </Authorize>
+          </Authorize>
         </div>
       </div>
 
@@ -414,10 +419,14 @@ export function CouponManagementPanel() {
                   <td className="p-3">{formatDate(c.validUntil)}</td>
                   <td className="p-3 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
                     {c.status === "DRAFT" && (
-                      <Button size="sm" variant="outline" onClick={() => void handleActivate(c.couponUid)}>Activate</Button>
+                      <Authorize permission="coupons.edit">
+                        <Button size="sm" variant="outline" onClick={() => void handleActivate(c.couponUid)}>Activate</Button>
+                      </Authorize>
                     )}
                     {c.status === "ACTIVE" && (
-                      <Button size="sm" variant="outline" onClick={() => void handleRevoke(c.couponUid)}>Revoke</Button>
+                      <Authorize permission="coupons.edit">
+                        <Button size="sm" variant="outline" onClick={() => void handleRevoke(c.couponUid)}>Revoke</Button>
+                      </Authorize>
                     )}
                   </td>
                 </tr>

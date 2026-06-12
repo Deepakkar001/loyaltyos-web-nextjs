@@ -38,6 +38,7 @@ export type SupportCaseCategory =
   | "VOUCHERS"
   | "BILLING"
   | "GO_LIVE"
+  | "MODULE_ACCESS_REQUEST"
   | "OTHER";
 
 export type SupportCasePriority = "NORMAL" | "URGENT";

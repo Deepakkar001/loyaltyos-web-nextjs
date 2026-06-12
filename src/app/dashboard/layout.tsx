@@ -8,14 +8,18 @@ import {
   CircleHelp,
   DatabaseZap,
   Download,
+  AlertTriangle,
   GitBranchPlus,
   HandCoins,
   Headset,
+  Scale,
   Layers,
   LayoutGrid,
   Menu,
   Plug,
   Rocket,
+  Gauge,
+  RotateCcw,
   Search,
   Settings,
   ShieldCheck,
@@ -40,6 +44,9 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import toast from "react-hot-toast";
+import { AccessProvider, useAccess } from "@/lib/access/use-access";
+import { resolveNavIcon } from "@/lib/access/icon-map";
+import { AccessRouteGuard } from "@/components/access/route-guard";
 
 type NavItem = {
   href: string;
@@ -85,6 +92,7 @@ const MAIN_NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/setup/event-schema", label: "Event Schema", icon: DatabaseZap },
       { href: "/dashboard/setup/rewards-catalog", label: "Rewards Catalog", icon: Star },
       { href: "/dashboard/setup/voucher-programs", label: "Voucher Programs", icon: Star },
+      { href: "/dashboard/configure/merchants", label: "Merchants", icon: Users },
       { href: "/dashboard/coupons", label: "Coupons", icon: TicketPercent },
       { href: "/dashboard/coupons/analytics", label: "Coupon Analytics", icon: BarChart3 },
     ],
@@ -120,6 +128,27 @@ const MAIN_NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/analytics/custom-reports", label: "Custom Reports", icon: BarChart3 },
       { href: "/dashboard/analytics/enrollment", label: "Enrollment", icon: UserPlus },
       { href: "/dashboard/analytics/breakage-expiry", label: "Breakage & Expiry", icon: Timer },
+      {
+        href: "/dashboard/analytics/accrual-redemption-reconciliation",
+        label: "Accrual & Reconciliation",
+        icon: Scale,
+      },
+      { href: "/dashboard/analytics/liability", label: "Liability Report", icon: HandCoins },
+      {
+        href: "/dashboard/analytics/failed-accruals-redemptions",
+        label: "Failed Accruals & Redemptions",
+        icon: AlertTriangle,
+      },
+      {
+        href: "/dashboard/analytics/reversals-adjustments",
+        label: "Reversals & Adjustments",
+        icon: RotateCcw,
+      },
+      {
+        href: "/dashboard/analytics/sla-performance",
+        label: "SLA & Performance",
+        icon: Gauge,
+      },
       { href: "/dashboard/analytics/export-data", label: "Export Data", icon: Download },
       { href: "/dashboard/analytics/segment-analysis", label: "Segment Analysis", icon: Users },
       { href: "/dashboard/analytics/cohort-analysis", label: "Cohort Analysis", icon: Layers },
@@ -172,16 +201,26 @@ function isPathAllowedDuringOnboarding(pathname: string): boolean {
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { onboardingStatus } = useOnboardingStore();
+  const { dynamicNavEnabled, navGroups: apiNavGroups } = useAccess();
   const fraudQueueCount = useReferralNavStore((s) => s.fraudQueueCount);
   const onboardingComplete = isOnboardingComplete(onboardingStatus);
 
-  const navGroups = useMemo(
-    () =>
-      onboardingComplete
-        ? MAIN_NAV_GROUPS
-        : [SETUP_PROGRESS_GROUP, ...MAIN_NAV_GROUPS],
-    [onboardingComplete]
-  );
+  const navGroups = useMemo(() => {
+    if (dynamicNavEnabled && apiNavGroups.length > 0) {
+      const fromApi: NavGroup[] = apiNavGroups.map((g) => ({
+        label: g.label,
+        items: g.items.map((item) => ({
+          href: item.href.split("?")[0] ?? item.href,
+          label: item.label,
+          icon: resolveNavIcon(item.iconKey),
+        })),
+      }));
+      return onboardingComplete ? fromApi : [SETUP_PROGRESS_GROUP, ...fromApi];
+    }
+    return onboardingComplete
+      ? MAIN_NAV_GROUPS
+      : [SETUP_PROGRESS_GROUP, ...MAIN_NAV_GROUPS];
+  }, [dynamicNavEnabled, apiNavGroups, onboardingComplete]);
 
   // Pick the single best-matching nav href (longest prefix wins) so a parent
   // and a more-specific child don't light up simultaneously.
@@ -295,6 +334,14 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
 
 export default function TenantDashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AccessProvider>
+      <TenantDashboardLayoutInner>{children}</TenantDashboardLayoutInner>
+    </AccessProvider>
+  );
+}
+
+function TenantDashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const {
@@ -594,7 +641,9 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
           )}
 
           <main id="main" className={cn("xl:pt-16 flex-1 min-w-0", mobileNavOpen && "xl:ml-0")}>
-            {children}
+            <AccessRouteGuard onboardingComplete={isOnboardingComplete(onboardingStatus)}>
+              {children}
+            </AccessRouteGuard>
           </main>
         </div>
       </div>

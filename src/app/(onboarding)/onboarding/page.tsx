@@ -5,12 +5,14 @@ import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { Step1Account } from "@/components/onboarding/steps/Step1Account";
 import { Step2Identity } from "@/components/onboarding/steps/Step2Identity";
 import { Step3Agreement } from "@/components/onboarding/steps/Step3Agreement";
+import { Step4Modules } from "@/components/onboarding/steps/Step4Modules";
+import { accessApi } from "@/lib/access/access-api";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ensureAuthSession, onboardingApi } from "@/lib/api/client";
 import { WizardStep } from "@/types/onboarding";
 
-const ONBOARDING_STEPS: WizardStep[] = ["account", "identity", "agreement"];
+const ONBOARDING_STEPS: WizardStep[] = ["account", "identity", "agreement", "modules"];
 
 export default function OnboardingPage() {
   const {
@@ -61,7 +63,16 @@ export default function OnboardingPage() {
         if (s.latestAgreementStatus === "REJECTED") {
           setAllowResubmit(true);
         } else if (s.latestAgreementStatus) {
-          router.replace("/dashboard/configure");
+          try {
+            const catalog = await accessApi.getModuleCatalog();
+            if (catalog.modulesConfigured) {
+              router.replace("/dashboard/configure");
+            } else {
+              setDisplayStep("modules");
+            }
+          } catch {
+            setDisplayStep("modules");
+          }
         }
       } catch {
         // If status fails, keep onboarding accessible.
@@ -69,7 +80,7 @@ export default function OnboardingPage() {
       }
     })();
     return () => { mounted = false; };
-  }, [hydrated, accessToken, router, syncStatusFromBackend, refreshTried]);
+  }, [hydrated, accessToken, router, syncStatusFromBackend, refreshTried, setDisplayStep]);
 
   useEffect(() => {
     if (
@@ -89,9 +100,20 @@ export default function OnboardingPage() {
     if (!statusChecked) return;
     if (allowResubmit) return;
     if (onboardingStatus === "AGREEMENT_SIGNED") {
-      router.replace("/dashboard/configure");
+      void (async () => {
+        try {
+          const catalog = await accessApi.getModuleCatalog();
+          if (catalog.modulesConfigured) {
+            router.replace("/dashboard/configure");
+          } else {
+            setDisplayStep("modules");
+          }
+        } catch {
+          setDisplayStep("modules");
+        }
+      })();
     }
-  }, [hydrated, accessToken, statusChecked, allowResubmit, onboardingStatus, router]);
+  }, [hydrated, accessToken, statusChecked, allowResubmit, onboardingStatus, router, setDisplayStep]);
 
   const goToStep = useCallback(
     (step: WizardStep) => {
@@ -156,7 +178,11 @@ export default function OnboardingPage() {
     agreement: (
       <Step3Agreement
         onBack={() => goBack("agreement")}
+        onContinue={() => setDisplayStep("modules")}
       />
+    ),
+    modules: (
+      <Step4Modules onBack={() => goBack("modules")} />
     ),
   };
 

@@ -458,7 +458,8 @@ export type WizardStep =
   | "account" // Step 1 — Company + contact details + password
   | "identity" // Step 2 — Identity mode + data residency selection
   | "agreement" // Step 3 — Commercial terms
-  | "programme" // Step 4 — Programme config + tier setup
+  | "modules" // Step 4 — Module entitlements picker
+  | "programme" // Step 5 — Programme config + tier setup
   | "integration" // Step 5 — API keys + webhook setup
   | "complete"; // Step 6 — Go-live summary
 
@@ -495,6 +496,14 @@ export const WIZARD_STEPS: WizardStepMeta[] = [
     isComplete: false,
     isActive: false,
     apiStatus: "AGREEMENT_PENDING",
+  },
+  {
+    id: "modules",
+    label: "Modules",
+    description: "Choose product modules for your tenant",
+    isComplete: false,
+    isActive: false,
+    apiStatus: "AGREEMENT_SIGNED",
   },
 ];
 

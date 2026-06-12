@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAnalyticsProgramme } from "@/lib/analytics/analytics-programme-context";
 import { lastNDaysRange } from "@/lib/analytics/date-range";
+import { AnalyticsExportButton } from "@/components/analytics/analytics-export-button";
+import { reportFilename } from "@/lib/analytics/export-csv";
 import { analyticsApi } from "@/lib/api/client";
 import type { EnrollmentReportResponse } from "@/types/analytics";
 
@@ -177,6 +179,12 @@ export default function EnrollmentReportPage() {
           <Button onClick={() => void load()} disabled={loading}>
             {loading ? "Loading…" : "Apply"}
           </Button>
+          <AnalyticsExportButton
+            exportPath="enrollment"
+            params={{ from, to, programmeUid }}
+            filename={reportFilename("enrollment", programmeUid, from, to)}
+            disabled={loading}
+          />
         </div>
       </AnalyticsPanel>
 

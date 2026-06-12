@@ -1,5 +1,6 @@
 "use client";
 
+import { Authorize } from "@/components/access/authorize";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -361,7 +362,7 @@ function DashboardHomeContent() {
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4">
             <KpiCard
-              title="Active Members"
+              title="Active customers"
               value={overview.activeMembers.value}
               tone="good"
               trendPct={overview.activeMembers.trendPct ?? 0}
@@ -369,7 +370,7 @@ function DashboardHomeContent() {
               onClick={() => router.push("/dashboard/analytics/segment-analysis")}
             />
             <KpiCard
-              title="Points Issued (Today)"
+              title="Points issued (today)"
               value={overview.pointsIssuedToday.value}
               unit="pts"
               tone="good"
@@ -379,7 +380,7 @@ function DashboardHomeContent() {
               onClick={() => router.push("/dashboard/analytics/custom-reports")}
             />
             <KpiCard
-              title="Redemptions (Today)"
+              title="Redemptions (today)"
               value={overview.redemptionsToday.value}
               unit="pts"
               tone="warn"
@@ -389,7 +390,7 @@ function DashboardHomeContent() {
               onClick={() => router.push("/dashboard/analytics/custom-reports")}
             />
             <KpiCard
-              title="Avg Order Value"
+              title="Avg order value"
               value={overview.avgOrderValue.value}
               unit="₹"
               tone="good"
@@ -401,7 +402,7 @@ function DashboardHomeContent() {
               onClick={() => router.push("/dashboard/analytics/custom-reports")}
             />
             <KpiCard
-              title="At-risk Members"
+              title="At-risk customers"
               value={overview.atRiskMemberPct.value}
               unit="%"
               tone="info"
@@ -870,9 +871,14 @@ function ReferralTrendsTable({ rows }: { rows: ReferralTrendPoint[] }) {
     return (
       <p className="text-sm text-muted-foreground py-4">
         No referral activity yet.{" "}
-        <Link href="/dashboard/referrals/create" className="text-[var(--accent-primary)] hover:underline">
-          Create a referral programme
-        </Link>{" "}
+        <Authorize
+          permission="referrals.create"
+          fallback={<span className="text-muted-foreground">Ask an admin to set up referrals.</span>}
+        >
+          <Link href="/dashboard/referrals/create" className="text-[var(--accent-primary)] hover:underline">
+            Create a referral programme
+          </Link>
+        </Authorize>{" "}
         to get started.
       </p>
     );
