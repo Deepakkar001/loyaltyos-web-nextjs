@@ -11,6 +11,11 @@ export interface NavGroupDto {
   items: NavItemDto[];
 }
 
+export interface RouteGuardDto {
+  path: string;
+  permissionKey: string;
+}
+
 export interface MeAccessResponse {
   tenantId: string;
   tenantUserId: string;
@@ -18,6 +23,7 @@ export interface MeAccessResponse {
   permissions: string[];
   entitledModules: string[];
   navGroups: NavGroupDto[];
+  routeGuards?: RouteGuardDto[];
   modulesConfigured: boolean;
   dynamicNavEnabled: boolean;
 }
@@ -31,6 +37,7 @@ export interface ModuleCatalogItemDto {
   preSelected?: boolean;
   locked?: boolean;
   enabled?: boolean;
+  entitlementSource?: string;
 }
 
 export interface ModuleCatalogResponse {
@@ -60,8 +67,10 @@ export interface TenantUserResponse {
   email: string;
   fullName?: string;
   status: string;
+  mustChangePassword?: boolean;
   roleIds: string[];
   inviteToken?: string;
+  inviteEmailSent?: boolean;
 }
 
 export interface PrivilegeRowDto {

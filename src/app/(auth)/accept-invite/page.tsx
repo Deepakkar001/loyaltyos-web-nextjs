@@ -23,6 +23,7 @@ function AcceptInviteForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setAccessToken = useOnboardingStore((s) => s.setAccessToken);
+  const setMustChangePassword = useOnboardingStore((s) => s.setMustChangePassword);
   const setTenantId = useOnboardingStore((s) => s.setTenantId);
   const setRegistrationData = useOnboardingStore((s) => s.setRegistrationData);
   const syncStatusFromBackend = useOnboardingStore((s) => s.syncStatusFromBackend);
@@ -41,11 +42,19 @@ function AcceptInviteForm() {
     },
   });
 
+  const tokenFromUrl = searchParams.get("token") ?? "";
+
   const onSubmit = async (data: FormValues) => {
+    const token = data.token || tokenFromUrl;
+    if (!token) {
+      toast.error("Invite link is missing a token. Use the link from your email.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await onboardingApi.acceptInvite(data.email, data.token, data.password);
+      const res = await onboardingApi.acceptInvite(data.email, token, data.password);
       setAccessToken(res.accessToken);
+      setMustChangePassword(res.mustChangePassword === true);
       setTenantId(res.tenantId);
       setRegistrationData({ email: res.email });
       syncStatusFromBackend(res.onboardingStatus);
@@ -70,7 +79,9 @@ function AcceptInviteForm() {
           <Input type="email" placeholder="Email" className="bg-slate-900" {...register("email")} />
           {errors.email && <p className="text-xs text-red-400 mt-1">{errors.email.message}</p>}
         </div>
-        {!searchParams.get("token") && (
+        {tokenFromUrl ? (
+          <input type="hidden" {...register("token")} />
+        ) : (
           <div>
             <Input placeholder="Invite token" className="bg-slate-900" {...register("token")} />
             {errors.token && <p className="text-xs text-red-400 mt-1">{errors.token.message}</p>}

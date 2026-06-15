@@ -19,6 +19,7 @@ interface OnboardingState {
   email: string | null;
   onboardingStatus: OnboardingStatus | null;
   accessToken: string | null;
+  mustChangePassword: boolean;
 
   // Current wizard position (backend-driven)
   currentStep: WizardStep;
@@ -44,6 +45,7 @@ interface OnboardingState {
   // Actions
   setTenantId: (id: string) => void;
   setAccessToken: (token: string | null) => void;
+  setMustChangePassword: (required: boolean) => void;
   setRegistrationData: (data: Partial<RegisterTenantRequest>) => void;
   setAgreementData: (data: Partial<SubmitAgreementRequest>) => void;
   setProgrammeData: (data: Partial<ProgrammeConfigRequest>) => void;
@@ -62,6 +64,7 @@ const INITIAL_STATE = {
   email: null,
   onboardingStatus: null,
   accessToken: null,
+  mustChangePassword: false,
   currentStep: "account" as WizardStep,
   displayStep: null as WizardStep | null,
   registrationData: {},
@@ -85,6 +88,8 @@ export const useOnboardingStore = create<OnboardingState>()(
         set({ accessToken: token });
         if (typeof window !== "undefined") setSessionAccessToken(token);
       },
+
+      setMustChangePassword: (required) => set({ mustChangePassword: required }),
 
       setRegistrationData: (data) =>
         set((s) => ({

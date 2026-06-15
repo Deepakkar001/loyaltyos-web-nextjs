@@ -1,14 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
+import { Plug, Sparkles } from "lucide-react";
+import toast from "react-hot-toast";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { StepHeader } from "../StepHeader";
 import { StepActions } from "../StepActions";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ModulePill } from "@/components/modules/ModulePill";
+import styles from "./Step4Modules.module.css";
 import { accessApi } from "@/lib/access/access-api";
 import type { ModuleCatalogItemDto } from "@/types/access";
-import { Plug } from "lucide-react";
-import toast from "react-hot-toast";
 
 interface Step4ModulesProps {
   onBack?: () => void;
@@ -16,6 +20,7 @@ interface Step4ModulesProps {
 
 export function Step4Modules({ onBack }: Step4ModulesProps) {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [tier, setTier] = useState("STANDARD");
@@ -73,6 +78,17 @@ export function Step4Modules({ onBack }: Step4ModulesProps) {
     }
   };
 
+  const { required, optional } = useMemo(() => {
+    const req = modules.filter((m) => m.required);
+    const opt = modules.filter((m) => !m.required);
+    return { required: req, optional: opt };
+  }, [modules]);
+
+  const optionalSelectedCount = useMemo(
+    () => optional.filter((m) => selected.has(m.moduleKey)).length,
+    [optional, selected]
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -81,87 +97,113 @@ export function Step4Modules({ onBack }: Step4ModulesProps) {
     );
   }
 
-  const required = modules.filter((m) => m.required);
-  const optional = modules.filter((m) => !m.required);
+  let pillIndex = 0;
 
   return (
-    <div className="space-y-8">
+    <TooltipProvider delay={280}>
+    <div className="space-y-6">
       <StepHeader
         title="Choose your modules"
-        description={`Your ${tier} plan includes essentials below. Add optional modules now or request more later via Support.`}
+        description="Pick the capabilities you want on day one. You can add or request more later from Support."
         badge="Module selection"
       />
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Required (included)</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {required.map((m) => (
-            <ModuleCard key={m.moduleKey} module={m} checked selected disabled />
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-          <Plug className="h-3.5 w-3.5" />
-          Integrations is required for API keys, webhooks, and go-live.
+      <motion.div
+        className={styles.selectionPanel}
+        initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <h2 className={styles.panelQuestion}>
+          What capabilities do you need for your loyalty programme?
+        </h2>
+        <p className={styles.panelSubtext}>
+          Your <span className="font-medium text-foreground">{tier}</span> plan includes essentials.
+          Tap optional modules to add them — selections animate instantly.
         </p>
-      </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Optional add-ons</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {optional.map((m) => (
-            <ModuleCard
-              key={m.moduleKey}
-              module={m}
-              checked={selected.has(m.moduleKey)}
-              selected={selected.has(m.moduleKey)}
-              disabled={!!m.locked}
-              onToggle={() => toggle(m)}
-            />
-          ))}
+        {required.length > 0 && (
+          <>
+            <p className={styles.sectionLabel}>Included with your plan</p>
+            <div className={styles.pillGrid} role="group" aria-label="Required modules">
+              {required.map((m) => {
+                const idx = pillIndex++;
+                return (
+                  <ModulePill
+                    key={m.moduleKey}
+                    label={m.displayName}
+                    description={m.description}
+                    selected
+                    locked
+                    index={idx}
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {optional.length > 0 && (
+          <>
+            <p className={styles.sectionLabel}>Optional add-ons</p>
+            <div className={styles.pillGrid} role="group" aria-label="Optional modules">
+              {optional.map((m) => {
+                const idx = pillIndex++;
+                const isSelected = selected.has(m.moduleKey);
+                return (
+                  <ModulePill
+                    key={m.moduleKey}
+                    label={m.displayName}
+                    description={m.description}
+                    selected={isSelected}
+                    locked={!!m.locked}
+                    disabled={!!m.locked}
+                    onToggle={() => toggle(m)}
+                    index={idx}
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <div className={styles.hintRow}>
+          <Plug className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--accent-primary)]" aria-hidden />
+          <span>
+            <strong className="font-medium text-foreground">Integrations</strong> is required for API
+            keys, event ingestion, and go-live. Optional modules can be enabled anytime from
+            Configuration.
+          </span>
         </div>
-      </section>
+      </motion.div>
+
+      <motion.div
+        className={styles.summaryStrip}
+        initial={reduceMotion ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.35 }}
+      >
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-[var(--accent-primary)]" aria-hidden />
+          <span className={styles.summaryCount}>
+            {selected.size} module{selected.size === 1 ? "" : "s"} selected
+          </span>
+        </div>
+        <span className={styles.summaryHint}>
+          {optionalSelectedCount > 0
+            ? `${optionalSelectedCount} optional add-on${optionalSelectedCount === 1 ? "" : "s"} chosen`
+            : "Required modules only — you can add more later"}
+        </span>
+      </motion.div>
 
       <StepActions
         onBack={onBack}
         onNext={() => void onSubmit()}
         nextLabel="Continue to programme setup"
         isLoading={submitting}
+        nextButtonClassName={optionalSelectedCount > 0 ? styles.continuePulse : undefined}
       />
     </div>
-  );
-}
-
-function ModuleCard({
-  module: m,
-  checked,
-  selected,
-  disabled,
-  onToggle,
-}: {
-  module: ModuleCatalogItemDto;
-  checked: boolean;
-  selected: boolean;
-  disabled?: boolean;
-  onToggle?: () => void;
-}) {
-  return (
-    <label
-      className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${
-        selected ? "border-primary/50 bg-primary/5" : "border-border"
-      } ${disabled ? "opacity-80 cursor-default" : "hover:border-primary/30"}`}
-    >
-      <Checkbox
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={() => onToggle?.()}
-        className="mt-0.5"
-      />
-      <div>
-        <p className="text-sm font-medium">{m.displayName}</p>
-        {m.locked && (
-          <p className="text-xs text-muted-foreground mt-0.5">Included in your plan</p>
-        )}
-      </div>
-    </label>
+    </TooltipProvider>
   );
 }

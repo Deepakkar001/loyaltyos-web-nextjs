@@ -37,6 +37,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { useUserStore } from "@/lib/store/user-store";
 import { useReferralNavStore } from "@/lib/referrals/referral-nav-store";
 import { ensureAuthSession, onboardingApi } from "@/lib/api/client";
 import { STATUS_TO_STEP, type OnboardingStatus } from "@/types/onboarding";
@@ -47,6 +48,7 @@ import toast from "react-hot-toast";
 import { AccessProvider, useAccess } from "@/lib/access/use-access";
 import { resolveNavIcon } from "@/lib/access/icon-map";
 import { AccessRouteGuard } from "@/components/access/route-guard";
+import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
 
 type NavItem = {
   href: string;
@@ -74,6 +76,7 @@ const SETUP_PROGRESS_GROUP: NavGroup = {
   items: [
     { href: "/dashboard/configure", label: "Setup Programme", icon: Settings },
     { href: "/dashboard/loyalty-rules/create/basic-info", label: "Rules Setup", icon: GitBranchPlus },
+    { href: "/dashboard/loyalty-rules/my-rules", label: "My Rules", icon: Search },
     { href: INTEGRATIONS_HREF, label: "Integrate", icon: Plug },
     { href: "/dashboard/go-live", label: "Go Live", icon: Rocket },
   ],
@@ -185,12 +188,7 @@ function getSetupRedirectPath(status: OnboardingStatus | null): string {
 function isPathAllowedDuringOnboarding(pathname: string): boolean {
   if (pathname.startsWith("/dashboard/configure")) return true;
   if (pathname.startsWith("/dashboard/loyalty-rules/create")) return true;
-  if (
-    pathname.startsWith("/dashboard/loyalty-rules/my-rules/") &&
-    pathname !== "/dashboard/loyalty-rules/my-rules"
-  ) {
-    return true;
-  }
+  if (pathname.startsWith("/dashboard/loyalty-rules/my-rules")) return true;
   if (pathname.startsWith("/dashboard/integration")) return true;
   if (pathname === "/dashboard/integrate") return true;
   if (pathname.startsWith("/dashboard/go-live")) return true;
@@ -352,7 +350,9 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
     setRegistrationData,
     onboardingStatus,
     syncStatusFromBackend,
+    mustChangePassword,
   } = useOnboardingStore();
+  const { fullName: sessionFullName, logout: logoutUserProfile } = useUserStore();
   const [hydrated, setHydrated] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [welcomeName, setWelcomeName] = useState<string | null>(null);
@@ -370,11 +370,14 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
         sessionStorage.setItem("loyaltyos_logout_intent", "1");
       }
       logout();
+      logoutUserProfile();
       router.replace("/login");
     }
   };
 
   const tenantLabel = useMemo(() => {
+    const fromSession = (sessionFullName ?? "").trim();
+    if (fromSession) return fromSession;
     const fromStatus = (welcomeName ?? "").trim();
     if (fromStatus) return fromStatus;
     const fromCompany = (companyName ?? "").trim();
@@ -391,7 +394,7 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
       }
     }
     return "there";
-  }, [companyName, email, welcomeName]);
+  }, [companyName, email, sessionFullName, welcomeName]);
 
   useEffect(() => {
     const unsub = useOnboardingStore.persist.onFinishHydration(() => setHydrated(true));
@@ -402,14 +405,14 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    if (!hydrated || !accessToken) return;
+    if (!hydrated || !accessToken || mustChangePassword) return;
     let alive = true;
     (async () => {
       try {
         const status = await onboardingApi.getMyStatus();
         if (!alive) return;
-        setWelcomeName(status.primaryContactName?.trim() || status.companyName?.trim() || null);
-        setRegistrationData({ companyName: status.companyName, email: status.email });
+        setWelcomeName(status.companyName?.trim() || null);
+        setRegistrationData({ companyName: status.companyName });
         if (status.onboardingStatus) {
           syncStatusFromBackend(status.onboardingStatus);
         }
@@ -431,7 +434,7 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
     return () => {
       alive = false;
     };
-  }, [accessToken, hydrated, setRegistrationData, syncStatusFromBackend]);
+  }, [accessToken, hydrated, mustChangePassword, setRegistrationData, syncStatusFromBackend]);
 
   const isLoginLikePath = pathname === "/login" || pathname.startsWith("/onboarding");
 
@@ -467,8 +470,8 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
     setCheckingReview(true);
     try {
       const status = await onboardingApi.getMyStatus();
-      setWelcomeName(status.primaryContactName?.trim() || status.companyName?.trim() || null);
-      setRegistrationData({ companyName: status.companyName, email: status.email });
+      setWelcomeName(status.companyName?.trim() || null);
+      setRegistrationData({ companyName: status.companyName });
       const review = status.latestAgreementStatus === "PENDING_APPROVAL";
       setUnderReview(review);
       if (!review) {
@@ -508,6 +511,15 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
         Skip to main content
       </a>
 
+      {mustChangePassword && (
+        <div className="fixed inset-0 z-[60] pointer-events-none">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
+          <div className="absolute inset-0 flex items-center justify-center p-6 pointer-events-auto">
+            <ChangePasswordDialog />
+          </div>
+        </div>
+      )}
+
       {underReview && (
         <div className="fixed inset-0 z-50 pointer-events-none">
           <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px]" />
@@ -535,7 +547,7 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
       {/* Desktop sidebar */}
       <aside className={cn(
         "hidden xl:flex fixed inset-y-0 left-0 w-72 bg-[var(--surface-card)] border-r border-gray-100 dark:border-white/[0.06] flex-col",
-        underReview && "blur-sm pointer-events-none select-none"
+        (underReview || mustChangePassword) && "blur-sm pointer-events-none select-none"
       )}>
         <div className="px-6 py-5">
           <div className="flex items-center gap-3">
@@ -570,7 +582,12 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Content column (prevents mobile header becoming a side-column) */}
-      <div className={cn("min-h-screen flex flex-col xl:pl-72", underReview && "blur-sm pointer-events-none select-none")}>
+      <div
+        className={cn(
+          "min-h-screen flex flex-col xl:pl-72",
+          (underReview || mustChangePassword) && "blur-sm pointer-events-none select-none"
+        )}
+      >
         {/* Mobile topbar */}
         <header className="xl:hidden sticky top-0 z-40 bg-[var(--surface-card)] border-b border-gray-100 dark:border-white/[0.06]">
           <div className="h-14 px-4 flex items-center justify-between gap-2">

@@ -1,7 +1,8 @@
 "use client";
 
 import { Authorize } from "@/components/access/authorize";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ModuleAccessDeniedBanner } from "@/components/access/ModuleAccessDeniedBanner";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -201,6 +202,7 @@ function DashboardHomeContent() {
   if (loading && !overview) {
     return (
       <div className="px-4 py-6 lg:px-8 lg:py-8 space-y-4">
+        <ModuleAccessDeniedBanner />
         <div className="h-8 w-64 rounded-lg bg-muted animate-pulse" />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -214,7 +216,8 @@ function DashboardHomeContent() {
 
   if (error && !overview) {
     return (
-      <div className="px-4 py-10 lg:px-8">
+      <div className="px-4 py-10 lg:px-8 space-y-4">
+        <ModuleAccessDeniedBanner />
         <Card className="bg-[var(--surface-card)] rounded-2xl p-8 shadow-[var(--shadow-card)] border-0 max-w-xl">
           <p className="text-lg font-bold">Unable to Load Dashboard</p>
           <p className="text-sm text-muted-foreground mt-2">{error}</p>
@@ -240,6 +243,7 @@ function DashboardHomeContent() {
   if (overview && !overview.hasData) {
     return (
       <div className="px-4 py-6 lg:px-8 lg:py-8 space-y-4">
+        <ModuleAccessDeniedBanner />
         <DashboardHeader
           programmeOptions={programmeOptions}
           programmeUid={programmeUid}
@@ -280,6 +284,7 @@ function DashboardHomeContent() {
 
   return (
     <div className="px-4 py-6 lg:px-8 lg:py-8 flex flex-col gap-6">
+      <ModuleAccessDeniedBanner />
       <DashboardHeader
         programmeOptions={programmeOptions}
         programmeUid={programmeUid}
@@ -970,7 +975,9 @@ function RedemptionsTable({
 export default function TenantDashboardHomePage() {
   return (
     <AnalyticsProgrammeProvider>
-      <DashboardHomeContent />
+      <Suspense fallback={null}>
+        <DashboardHomeContent />
+      </Suspense>
     </AnalyticsProgrammeProvider>
   );
 }

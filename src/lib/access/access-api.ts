@@ -9,6 +9,9 @@ import type {
 } from "@/types/access";
 
 export type CreateRolePayload = { roleName: string; description?: string; templateKey?: string };
+export type UpdateRolePayload = { roleName: string; description?: string };
+export type ReassignUserRolePayload = { roleId: string };
+export type UpdateUserPayload = { fullName?: string; roleId: string };
 export type InviteUserPayload = {
   email: string;
   fullName?: string;
@@ -55,6 +58,14 @@ export const accessApi = {
     return res.data;
   },
 
+  updateRole: async (roleId: string, body: UpdateRolePayload): Promise<RoleResponse> => {
+    const res = await apiClient.patch<RoleResponse>(
+      `/api/v1/me/access/roles/${encodeURIComponent(roleId)}`,
+      body
+    );
+    return res.data;
+  },
+
   deleteRole: async (roleId: string): Promise<void> => {
     await apiClient.delete(`/api/v1/me/access/roles/${encodeURIComponent(roleId)}`);
   },
@@ -66,6 +77,22 @@ export const accessApi = {
 
   inviteUser: async (body: InviteUserPayload): Promise<TenantUserResponse> => {
     const res = await apiClient.post<TenantUserResponse>("/api/v1/me/access/users/invite", body);
+    return res.data;
+  },
+
+  reassignUserRole: async (userId: string, body: ReassignUserRolePayload): Promise<TenantUserResponse> => {
+    const res = await apiClient.patch<TenantUserResponse>(
+      `/api/v1/me/access/users/${encodeURIComponent(userId)}/role`,
+      body
+    );
+    return res.data;
+  },
+
+  updateUser: async (userId: string, body: UpdateUserPayload): Promise<TenantUserResponse> => {
+    const res = await apiClient.patch<TenantUserResponse>(
+      `/api/v1/me/access/users/${encodeURIComponent(userId)}`,
+      body
+    );
     return res.data;
   },
 

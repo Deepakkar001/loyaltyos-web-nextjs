@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import toast from "react-hot-toast";
@@ -16,8 +17,16 @@ import type { ApiKeyGeneratedResponse } from "@/types/onboarding";
 import { GenerateCredentialModal } from "@/components/integration/GenerateCredentialModal";
 import { RevealSecretModal } from "@/components/integration/RevealSecretModal";
 import { UsageStatistics } from "@/components/integration/UsageStatistics";
+import { onboardingApi } from "@/lib/api/client";
+import { useOnboardingStore } from "@/lib/store/onboarding-store";
+
+function hasActiveCredential(credentials: CredentialSummary[], environment: ApiKeyEnvironment): boolean {
+  return credentials.some((c) => c.status === "ACTIVE" && c.environment === environment);
+}
 
 export default function IntegrationDashboardPage() {
+  const router = useRouter();
+  const { syncStatusFromBackend } = useOnboardingStore();
   const [tab, setTab] = useState<ApiKeyEnvironment>("SANDBOX");
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [credentials, setCredentials] = useState<CredentialSummary[]>([]);
@@ -62,6 +71,48 @@ export default function IntegrationDashboardPage() {
     toast.success("Copied");
   };
 
+  const syncOnboardingStatus = useCallback(async () => {
+    try {
+      const status = await onboardingApi.getMyStatus();
+      if (status.onboardingStatus) {
+        syncStatusFromBackend(status.onboardingStatus);
+      }
+    } catch {
+      // Non-blocking: setup sidebar may lag until next status poll.
+    }
+  }, [syncStatusFromBackend]);
+
+  const maybeContinueToGoLive = useCallback(
+    async (activeCredentials: CredentialSummary[]) => {
+      const hasSandbox = hasActiveCredential(activeCredentials, "SANDBOX");
+      const hasProduction = hasActiveCredential(activeCredentials, "PRODUCTION");
+      if (!hasSandbox || !hasProduction) {
+        if (hasSandbox && !hasProduction) {
+          toast("Sandbox credentials saved. Generate production credentials to continue to Go Live.", {
+            duration: 5000,
+          });
+        }
+        return;
+      }
+      await syncOnboardingStatus();
+      toast.success("Credentials ready. Continue to Go Live.");
+      router.replace("/dashboard/go-live");
+    },
+    [router, syncOnboardingStatus]
+  );
+
+  const handleCredentialModalClose = useCallback(async () => {
+    setShowGenerateModal(false);
+    setGenerated(null);
+    try {
+      const creds = await integrationDashboardApi.listCredentials("all");
+      setCredentials(creds);
+      await maybeContinueToGoLive(creds);
+    } catch {
+      await refresh();
+    }
+  }, [maybeContinueToGoLive, refresh]);
+
   const onGenerate = async () => {
     setLoading(true);
     try {
@@ -69,6 +120,9 @@ export default function IntegrationDashboardPage() {
       setGenerated(res);
       setShowGenerateModal(true);
       await refresh();
+      if (tab === "SANDBOX") {
+        await syncOnboardingStatus();
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -230,8 +284,7 @@ export default function IntegrationDashboardPage() {
         open={showGenerateModal}
         credentials={generated}
         onClose={() => {
-          setShowGenerateModal(false);
-          setGenerated(null);
+          void handleCredentialModalClose();
         }}
         onCopy={copy}
       />

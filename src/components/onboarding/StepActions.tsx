@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 interface StepActionsProps {
@@ -9,6 +10,7 @@ interface StepActionsProps {
   isLoading?: boolean;
   nextLabel?: string;
   isLastStep?: boolean;
+  nextButtonClassName?: string;
 }
 
 export function StepActions({
@@ -16,6 +18,7 @@ export function StepActions({
   onBack,
   isLoading,
   nextLabel = "Continue",
+  nextButtonClassName,
 }: StepActionsProps) {
   return (
     <div className="flex items-center justify-between pt-8 mt-8 border-t border-surface-200">
@@ -35,7 +38,10 @@ export function StepActions({
         onClick={onNext}
         disabled={isLoading}
         size="lg"
-        className="bg-brand-600 hover:bg-brand-700 text-white min-w-[140px]"
+        className={cn(
+          "bg-brand-600 hover:bg-brand-700 text-white min-w-[140px]",
+          nextButtonClassName
+        )}
       >
         {isLoading ? (
           <>

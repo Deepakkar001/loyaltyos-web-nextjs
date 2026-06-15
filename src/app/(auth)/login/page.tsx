@@ -24,7 +24,7 @@ type FormData = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setTenantId, setRegistrationData, setAccessToken, syncStatusFromBackend } =
+  const { setTenantId, setRegistrationData, setAccessToken, setMustChangePassword, syncStatusFromBackend } =
     useOnboardingStore();
   const [showPassword, setShowPassword] = useState(false);
   const { setFullName } = useUserStore();
@@ -47,10 +47,15 @@ export default function LoginPage() {
       setAccessToken(res.accessToken);
       setTenantId(res.tenantId);
       setRegistrationData({ email: res.email });
+      setMustChangePassword(res.mustChangePassword === true);
       syncStatusFromBackend(res.onboardingStatus);
       setFullName(res.fullName);
       const welcomeName = res.fullName?.trim();
-      toast.success(`Welcome back, ${welcomeName || "there"}!`);
+      if (res.mustChangePassword) {
+        toast("Please set a new password to continue.", { duration: 5000 });
+      } else {
+        toast.success(`Welcome back, ${welcomeName || "there"}!`);
+      }
       // Route immediately to the right destination to avoid showing onboarding steps briefly.
       // Guided Setup Progress routing:
       // AGREEMENT_SIGNED → Configure

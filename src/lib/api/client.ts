@@ -1,4 +1,10 @@
-import axios, { AxiosError, AxiosResponse } from "axios";
+import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "axios";
+
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    skipAuth?: boolean;
+  }
+}
 import {
   ApiErrorResponse,
   ApiKeyGeneratedResponse,
@@ -23,9 +29,11 @@ import type {
   CouponResponse,
   CouponUsageReportResponse,
 } from "@/types/coupon";
+import { dispatchSessionRefreshed } from "@/lib/auth/session-events";
 import { getAccessToken, setAccessToken as setSessionAccessToken, clearSession } from "@/lib/auth/session";
 import { EarnRuleDetailResponse, EarnRuleResponse, RuleChangeLogResponse, RuleStatus, RuleUpsertRequest } from "@/types/rules";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { useUserStore } from "@/lib/store/user-store";
 import {
   CampaignEventSchemaUpsertRequest,
   CampaignParticipationResponse,
@@ -120,13 +128,16 @@ export async function ensureAuthSession(): Promise<LoginResponse> {
   store.setAccessToken(token);
   store.setTenantId(res.tenantId);
   store.setRegistrationData({ email: res.email });
+  store.setMustChangePassword(res.mustChangePassword === true);
   store.syncStatusFromBackend(res.onboardingStatus);
+  useUserStore.getState().setFullName(res.fullName ?? null);
+  dispatchSessionRefreshed();
   return res;
 }
 
 // Attach auth token to every authenticated request.
-apiClient.interceptors.request.use((config) => {
-  if (typeof window === "undefined") return config;
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  if (typeof window === "undefined" || config.skipAuth) return config;
   const token = getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -137,8 +148,14 @@ apiClient.interceptors.response.use(
   (res) => res,
   async (err: AxiosError<ApiErrorResponse>) => {
     const status = err.response?.status;
-    const original = err.config as (typeof err.config & { _retry?: boolean });
-    if (typeof window !== "undefined" && status === 401 && original && !original._retry) {
+    const original = err.config as (typeof err.config & { _retry?: boolean; skipAuth?: boolean });
+    if (
+      typeof window !== "undefined" &&
+      status === 401 &&
+      original &&
+      !original._retry &&
+      !original.skipAuth
+    ) {
       original._retry = true;
       try {
         const res = await ensureAuthSession();
@@ -266,8 +283,20 @@ export const onboardingApi = {
     try {
       const res: AxiosResponse<LoginResponse> = await apiClient.post(
         "/api/v1/auth/accept-invite",
-        { email, token, password }
+        { email, token, password },
+        { skipAuth: true }
       );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  changePassword: async (currentPassword: string, newPassword: string): Promise<LoginResponse> => {
+    try {
+      const res: AxiosResponse<LoginResponse> = await apiClient.post("/api/v1/auth/change-password", {
+        currentPassword,
+        newPassword,
+      });
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);

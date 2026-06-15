@@ -414,6 +414,7 @@ export interface LoginResponse {
   fullName: string | null;
   onboardingStatus: OnboardingStatus;
   latestAgreementStatus: AgreementStatus | null;
+  mustChangePassword?: boolean;
 }
 
 export interface OnboardingSelectOption {

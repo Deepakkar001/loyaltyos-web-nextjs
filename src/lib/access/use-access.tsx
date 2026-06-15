@@ -21,9 +21,9 @@ import {
 } from "react";
 
 import { accessApi } from "@/lib/access/access-api";
-
+import { canAccessDashboardPath } from "@/lib/access/route-access";
+import { SESSION_REFRESHED_EVENT } from "@/lib/auth/session-events";
 import type { MeAccessResponse, NavGroupDto } from "@/types/access";
-
 import { getAccessToken } from "@/lib/auth/session";
 
 
@@ -76,19 +76,7 @@ type AccessContextValue = {
 
 const AccessContext = createContext<AccessContextValue | null>(null);
 
-
-
-function pathMatches(routePath: string, pathname: string): boolean {
-
-  const base = routePath.split("?")[0];
-
-  if (base === pathname) return true;
-
-  if (pathname.startsWith(base + "/")) return true;
-
-  return false;
-
-}
+const enforcementEnabled = ENFORCE_PERMISSIONS || DYNAMIC_NAV;
 
 
 
@@ -131,9 +119,15 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
 
   useEffect(() => {
-
     void refreshAccess();
+  }, [refreshAccess]);
 
+  useEffect(() => {
+    const onSessionRefreshed = () => {
+      void refreshAccess();
+    };
+    window.addEventListener(SESSION_REFRESHED_EVENT, onSessionRefreshed);
+    return () => window.removeEventListener(SESSION_REFRESHED_EVENT, onSessionRefreshed);
   }, [refreshAccess]);
 
 
@@ -172,19 +166,21 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
     (pathname: string) => {
 
-      if (!DYNAMIC_NAV || !access?.navGroups?.length) return true;
+      if (!enforcementEnabled) return true;
 
-      if (pathname === "/dashboard" || pathname === "/dashboard/") return true;
+      if (loading) return false;
 
-      return access.navGroups.some((g) =>
+      const routeGuards = access?.routeGuards ?? [];
 
-        g.items.some((item) => pathMatches(item.href, pathname))
+      return canAccessDashboardPath(pathname, permissions, routeGuards, {
 
-      );
+        enforcementEnabled: true,
+
+      });
 
     },
 
-    [access]
+    [access?.routeGuards, permissions, loading]
 
   );
 
