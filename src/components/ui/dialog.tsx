@@ -31,7 +31,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-[1000] bg-black/50 backdrop-blur-sm duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-[1000] bg-black/50 backdrop-blur-sm transition-opacity duration-300 ease-out data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
         className
       )}
       {...props}
@@ -53,7 +53,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-[1001] grid w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl bg-white p-6 text-sm text-slate-900 shadow-2xl ring-1 ring-black/10 duration-150 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 dark:bg-popover dark:text-popover-foreground dark:ring-foreground/10",
+          "fixed top-1/2 left-1/2 z-[1001] grid w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl bg-white p-6 text-sm text-slate-900 shadow-2xl ring-1 ring-black/10 outline-none transition-[transform,opacity] duration-300 ease-out data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.96] data-[ending-style]:opacity-0 dark:bg-popover dark:text-popover-foreground dark:ring-foreground/10",
           className
         )}
         {...props}

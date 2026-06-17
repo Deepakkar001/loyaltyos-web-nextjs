@@ -51,10 +51,10 @@
     --sidebar-ring: oklch(0.708 0 0);
 
     /* Surface hierarchy — 4 levels of depth */
-    --surface-page: #F8F7F4;
-    --surface-card: #FFFFFF;
+    --surface-page: #fcf9f1;
+    --surface-card: #ffffff;
     --surface-raised: #FFFFFF;
-    --surface-sunken: #F1EFF8;
+    --surface-sunken: #E9E8E4;
 
     /* Semantic accent */
     --accent-primary: #5B4FE8;

@@ -67,11 +67,23 @@ function mapOverview(data: Record<string, unknown>): DashboardOverview {
   };
 }
 
+import type { DashboardDateRange } from "@/lib/analytics/dashboard-period";
+
+export type { DashboardDateRange };
+
 export const dashboardApi = {
-  getOverview: async (programmeUid = "default"): Promise<DashboardOverview> => {
+  getOverview: async (
+    programmeUid = "default",
+    dateRange?: DashboardDateRange | null
+  ): Promise<DashboardOverview> => {
     try {
       const res = await apiClient.get<Record<string, unknown>>("/api/v1/me/dashboard/overview", {
-        params: { programmeUid },
+        params: {
+          programmeUid,
+          ...(dateRange?.from && dateRange?.to
+            ? { fromDate: dateRange.from, toDate: dateRange.to }
+            : {}),
+        },
       });
       return mapOverview(res.data);
     } catch (err) {

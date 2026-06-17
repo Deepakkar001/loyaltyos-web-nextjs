@@ -31,8 +31,9 @@ export default function CampaignDetailPage() {
   const [setupStatus, setSetupStatus] = useState<CampaignSetupStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) setLoading(true);
     try {
       const [c, s, p, setup] = await Promise.all([
         campaignsAdminApi.getCampaign(campaignUid),
@@ -47,7 +48,7 @@ export default function CampaignDetailPage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to load campaign");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [campaignUid]);
 
@@ -66,7 +67,8 @@ export default function CampaignDetailPage() {
       if (action === "pause") await campaignsAdminApi.pauseCampaign(campaignUid);
       if (action === "end") await campaignsAdminApi.endCampaign(campaignUid);
       toast.success(`Campaign ${action}d`);
-      await reload();
+      // Keep target-audience panel mounted so the customer table does not reset on pause/activate.
+      await reload({ silent: action === "pause" || action === "activate" });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : `Failed to ${action}`);
     }
@@ -266,18 +268,14 @@ export default function CampaignDetailPage() {
             {formatCustomerScopeLabel(campaign.customerScope, campaign.customerCount)}
           </p>
         </div>
-        {campaign.customerScope === "TARGETED" && canEdit ? (
+        {campaign.customerScope === "TARGETED" ? (
           <CampaignTargetAudiencePanel
+            key={campaignUid}
             campaignUid={campaignUid}
             customerCount={campaign.customerCount ?? 0}
             onCustomerCountChange={handleTargetCustomerCountChange}
+            mode={canEdit ? "manage" : "view"}
           />
-        ) : campaign.customerScope === "TARGETED" ? (
-          <p className="text-sm text-muted-foreground">
-            {(campaign.customerCount ?? 0) > 0
-              ? `${campaign.customerCount} customers in the target list.`
-              : "No customers in the target list."}
-          </p>
         ) : null}
       </Card>
 

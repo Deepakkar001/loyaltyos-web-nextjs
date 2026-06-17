@@ -205,8 +205,8 @@ export function ReferralProgrammeProvider({ children }: { children: ReactNode })
   const refreshAnalytics = useCallback(async () => {
     try {
       const [trendData, top, ttp] = await Promise.all([
-        referralApi.getTrends(programmeUid, trendGranularity, 30),
-        referralApi.getTopReferrers(programmeUid, 10),
+        referralApi.getTrends(programmeUid, null, trendGranularity, 30),
+        referralApi.getTopReferrers(programmeUid, null, 10),
         referralApi.getTimeToFirstPurchase(programmeUid),
       ]);
       setTrends(trendData);

@@ -21,13 +21,17 @@ type CampaignTargetAudiencePanelProps = {
   campaignUid: string;
   customerCount: number;
   onCustomerCountChange?: (count: number) => void;
+  /** manage: upload + search + table; view: search + table only (e.g. active campaigns). */
+  mode?: "manage" | "view";
 };
 
 export function CampaignTargetAudiencePanel({
   campaignUid,
   customerCount,
   onCustomerCountChange,
+  mode = "manage",
 }: CampaignTargetAudiencePanelProps) {
+  const isViewOnly = mode === "view";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadSpec, setUploadSpec] = useState<CampaignTargetUploadSpecResponse | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -40,6 +44,7 @@ export function CampaignTargetAudiencePanel({
   const [loadingList, setLoadingList] = useState(false);
   const pageSize = 20;
   const onCustomerCountChangeRef = useRef(onCustomerCountChange);
+  const prevModeRef = useRef(mode);
   useEffect(() => {
     onCustomerCountChangeRef.current = onCustomerCountChange;
   }, [onCustomerCountChange]);
@@ -54,9 +59,9 @@ export function CampaignTargetAudiencePanel({
         size: pageSize,
         search: search.trim() || undefined,
       });
-      setCustomers(res.content);
-      setTotalPages(res.totalPages);
-      onCustomerCountChangeRef.current?.(res.totalElements);
+      setCustomers(res?.content ?? []);
+      setTotalPages(res?.totalPages ?? 0);
+      onCustomerCountChangeRef.current?.(res?.totalElements ?? 0);
     } catch (e) {
       if (e instanceof ApiError) toast.error(e.message);
     } finally {
@@ -76,6 +81,7 @@ export function CampaignTargetAudiencePanel({
   }, [campaignUid]);
 
   useEffect(() => {
+    if (isViewOnly) return;
     void (async () => {
       try {
         await ensureAuthSession();
@@ -85,15 +91,22 @@ export function CampaignTargetAudiencePanel({
         if (e instanceof ApiError) toast.error(e.message);
       }
     })();
-  }, []);
+  }, [isViewOnly]);
 
   useEffect(() => {
     void loadCustomers();
   }, [loadCustomers]);
 
   useEffect(() => {
+    if (prevModeRef.current === mode) return;
+    prevModeRef.current = mode;
+    void loadCustomers();
+  }, [mode, loadCustomers]);
+
+  useEffect(() => {
+    if (isViewOnly) return;
     void loadUploads();
-  }, [loadUploads]);
+  }, [isViewOnly, loadUploads]);
 
   const onUpload = async (file: File) => {
     if (!campaignUid) {
@@ -156,93 +169,35 @@ export function CampaignTargetAudiencePanel({
     return `${n.toLocaleString()} targeted`;
   }, [customerCount]);
 
+  const listToolbar = (
+    <div className="flex items-center justify-between gap-3">
+      <Badge variant="outline">{countLabel}</Badge>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="rounded-full"
+        disabled={loadingList}
+        onClick={() => void loadCustomers()}
+      >
+        <RefreshCw className={cn("h-4 w-4 mr-1.5", loadingList && "animate-spin")} />
+        Refresh
+      </Button>
+    </div>
+  );
+
   return (
     <Card className="p-6 border-border/70 bg-[var(--surface-card)] space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      {!isViewOnly ? (
         <div className="space-y-1">
           <p className="text-sm font-semibold">Target customer list</p>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Download the example CSV, add your customer IDs, then upload. Only listed customers can
-            receive this campaign when audience is set to Specific Customers.
-          </p>
-          <Badge variant="outline" className="mt-1">
-            {countLabel}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full"
-            disabled={!uploadSpec?.exampleCsv}
-            onClick={downloadTemplate}
-          >
-            <Download className="h-4 w-4 mr-1.5" />
-            Download example CSV
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full"
-            disabled={loadingList}
-            onClick={() => void loadCustomers()}
-          >
-            <RefreshCw className={cn("h-4 w-4 mr-1.5", loadingList && "animate-spin")} />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {uploadSpec ? (
-        <div className="rounded-xl border border-border bg-[var(--surface-sunken)] p-4 space-y-3">
-          <p className="text-sm font-semibold">Required file format</p>
-          <p className="text-xs text-muted-foreground">
-            {uploadSpec.format} · {uploadSpec.encoding} · max {uploadSpec.maxFileSizeMb} MB · up to{" "}
-            {uploadSpec.maxRows.toLocaleString()} rows
-          </p>
-          {uploadSpec.standardHeaders?.length ? (
-            <p className="text-xs font-mono bg-background border border-border rounded-lg px-3 py-2">
-              {uploadSpec.standardHeaders.join(",")}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">Loading upload format…</p>
-      )}
-
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv,text/csv"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void onUpload(file);
-          }}
-        />
-        <Button
-          type="button"
-          className="rounded-full"
-          disabled={uploading || !campaignUid}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Upload className="h-4 w-4 mr-1.5" />
-          {uploading ? "Uploading…" : "Upload CSV"}
-        </Button>
-      </div>
-
-      {lastUpload?.uploadUid ? (
-        <div className="rounded-xl border border-border bg-[var(--surface-sunken)] p-3 text-sm space-y-1">
-          <p className="font-medium">Last upload — {lastUpload.uploadUid.slice(0, 8)}…</p>
-          <p className="text-muted-foreground text-xs">
-            Status: {lastUpload.status} · Imported: {lastUpload.importedCount ?? 0} · Duplicates:{" "}
-            {lastUpload.duplicateCount ?? 0} · Errors: {lastUpload.errorCount ?? 0}
+            Listed customers receive this campaign when audience is set to Specific Customers.
           </p>
         </div>
       ) : null}
+
+      {listToolbar}
 
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">Search customer ID</Label>
@@ -258,43 +213,72 @@ export function CampaignTargetAudiencePanel({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            {isViewOnly ? (
+              <>
+                <col style={{ width: "33.33%" }} />
+                <col style={{ width: "33.33%" }} />
+                <col style={{ width: "33.34%" }} />
+              </>
+            ) : (
+              <>
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "33%" }} />
+                <col style={{ width: "33%" }} />
+                <col style={{ width: "22%" }} />
+              </>
+            )}
+          </colgroup>
           <thead>
             <tr className="border-b border-border bg-[var(--surface-sunken)] text-left text-xs text-muted-foreground">
-              <th className="px-3 py-2 font-medium w-14">Sl No</th>
-              <th className="px-3 py-2 font-medium">Customer ID</th>
-              <th className="px-3 py-2 font-medium">Added</th>
-              <th className="px-3 py-2 font-medium text-right">Action</th>
+              <th className="px-4 py-2 font-medium">Sl No</th>
+              <th className="px-4 py-2 font-medium">Customer ID</th>
+              <th className="px-4 py-2 font-medium">Added</th>
+              {!isViewOnly ? (
+                <th className="px-4 py-2 font-medium text-right">Action</th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
             {customers.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground text-xs">
-                  {loadingList ? "Loading…" : "No targeted customers yet. Upload a CSV to add IDs."}
+                <td
+                  colSpan={isViewOnly ? 3 : 4}
+                  className="px-3 py-6 text-center text-muted-foreground text-xs"
+                >
+                  {loadingList
+                    ? "Loading…"
+                    : isViewOnly
+                      ? "No targeted customers in this list."
+                      : "No targeted customers yet. Upload a CSV to add IDs."}
                 </td>
               </tr>
             ) : (
               customers.map((row, index) => (
                 <tr key={row.customerId} className="border-b border-border/60 last:border-0">
-                  <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground">
+                  <td className="px-4 py-2 tabular-nums text-xs text-muted-foreground">
                     {page * pageSize + index + 1}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs">{row.customerId}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                  <td className="px-4 py-2 font-mono text-xs truncate" title={row.customerId}>
+                    {row.customerId}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">
                     {row.addedAt ? new Date(row.addedAt).toLocaleString() : "—"}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-full text-red-600"
-                      onClick={() => void removeCustomer(row.customerId)}
-                    >
-                      Remove
-                    </Button>
-                  </td>
+                  {!isViewOnly ? (
+                    <td className="px-4 py-2 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 rounded-full text-red-600"
+                        onClick={() => void removeCustomer(row.customerId)}
+                      >
+                        Remove
+                      </Button>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
@@ -328,7 +312,73 @@ export function CampaignTargetAudiencePanel({
         </div>
       ) : null}
 
-      {uploads.length > 0 ? (
+      {!isViewOnly ? (
+        <div className="space-y-4 border-t border-border/60 pt-5">
+          <p className="text-sm font-semibold">Add customers via CSV</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              disabled={!uploadSpec?.exampleCsv}
+              onClick={downloadTemplate}
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Download example CSV
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void onUpload(file);
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-full"
+              disabled={uploading || !campaignUid}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4 mr-1.5" />
+              {uploading ? "Uploading…" : "Upload CSV"}
+            </Button>
+          </div>
+
+          {uploadSpec ? (
+            <div className="rounded-xl border border-border bg-[var(--surface-sunken)] p-4 space-y-3">
+              <p className="text-sm font-semibold">Required file format</p>
+              <p className="text-xs text-muted-foreground">
+                {uploadSpec.format} · {uploadSpec.encoding} · max {uploadSpec.maxFileSizeMb} MB · up to{" "}
+                {uploadSpec.maxRows.toLocaleString()} rows
+              </p>
+              {uploadSpec.standardHeaders?.length ? (
+                <p className="text-xs font-mono bg-background border border-border rounded-lg px-3 py-2">
+                  {uploadSpec.standardHeaders.join(",")}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Loading upload format…</p>
+          )}
+
+          {lastUpload?.uploadUid ? (
+            <div className="rounded-xl border border-border bg-[var(--surface-sunken)] p-3 text-sm space-y-1">
+              <p className="font-medium">Last upload — {lastUpload.uploadUid.slice(0, 8)}…</p>
+              <p className="text-muted-foreground text-xs">
+                Status: {lastUpload.status} · Imported: {lastUpload.importedCount ?? 0} · Duplicates:{" "}
+                {lastUpload.duplicateCount ?? 0} · Errors: {lastUpload.errorCount ?? 0}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!isViewOnly && uploads.length > 0 ? (
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Recent uploads</p>
           <div className="overflow-x-auto rounded-xl border border-border">

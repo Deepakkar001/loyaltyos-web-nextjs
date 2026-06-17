@@ -1532,6 +1532,10 @@ export type ReferralDashboardResponse = {
   totalPointsIssued: number;
   conversionRatePercent?: number;
   averagePointsPerReferral?: number;
+  totalReferralsTrendPct?: number | null;
+  rewardedTrendPct?: number | null;
+  conversionTrendPct?: number | null;
+  totalPointsTrendPct?: number | null;
 };
 
 export type ReferralListItem = {
@@ -1668,10 +1672,18 @@ export const referralApi = {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
-  getDashboard: async (programmeUid = "default"): Promise<ReferralDashboardResponse> => {
+  getDashboard: async (
+    programmeUid = "default",
+    dateRange?: { from: string; to: string } | null
+  ): Promise<ReferralDashboardResponse> => {
     try {
       const res = await apiClient.get<ReferralDashboardResponse>("/api/v1/me/referrals/dashboard", {
-        params: { programmeUid },
+        params: {
+          programmeUid,
+          ...(dateRange?.from && dateRange?.to
+            ? { fromDate: dateRange.from, toDate: dateRange.to }
+            : {}),
+        },
       });
       return res.data;
     } catch (err) {
@@ -1747,22 +1759,38 @@ export const referralApi = {
   },
   getTrends: async (
     programmeUid = "default",
+    dateRange?: { from: string; to: string } | null,
     granularity: "DAILY" | "WEEKLY" = "DAILY",
     days = 30
   ): Promise<ReferralTrendPoint[]> => {
     try {
       const res = await apiClient.get<ReferralTrendPoint[]>("/api/v1/me/referrals/analytics/trends", {
-        params: { programmeUid, granularity, days },
+        params: {
+          programmeUid,
+          ...(dateRange?.from && dateRange?.to
+            ? { fromDate: dateRange.from, toDate: dateRange.to }
+            : { granularity, days }),
+        },
       });
       return res.data;
     } catch (err) {
       handleError(err as AxiosError<ApiErrorResponse>);
     }
   },
-  getTopReferrers: async (programmeUid = "default", limit = 10): Promise<ReferralTopReferrer[]> => {
+  getTopReferrers: async (
+    programmeUid = "default",
+    dateRange?: { from: string; to: string } | null,
+    limit = 10
+  ): Promise<ReferralTopReferrer[]> => {
     try {
       const res = await apiClient.get<ReferralTopReferrer[]>("/api/v1/me/referrals/analytics/top-referrers", {
-        params: { programmeUid, limit },
+        params: {
+          programmeUid,
+          limit,
+          ...(dateRange?.from && dateRange?.to
+            ? { fromDate: dateRange.from, toDate: dateRange.to }
+            : {}),
+        },
       });
       return res.data;
     } catch (err) {
