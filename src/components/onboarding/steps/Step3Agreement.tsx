@@ -40,9 +40,10 @@ type FormData = z.infer<typeof schema>;
 
 interface Step3AgreementProps {
   onBack?: () => void;
+  onContinue?: () => void;
 }
 
-export function Step3Agreement({ onBack }: Step3AgreementProps) {
+export function Step3Agreement({ onBack, onContinue }: Step3AgreementProps) {
   const router = useRouter();
   const {
     tenantId,
@@ -130,7 +131,11 @@ export function Step3Agreement({ onBack }: Step3AgreementProps) {
       toast.success(
         "Agreement submitted for review. Our team will approve within 1 business day."
       );
-      router.push("/dashboard");
+      if (onContinue) {
+        onContinue();
+      } else {
+        router.push("/onboarding");
+      }
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
     } finally {

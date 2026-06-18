@@ -90,7 +90,7 @@ describe("NodeValidator", () => {
     expect(errors.some((e) => e.field === "field")).toBe(true);
   });
 
-  it("validates operator compatibility", () => {
+  it("allows any supported operator on numeric fields", () => {
     const node: ConditionFlowNode = {
       id: "cond1",
       type: "conditionNode",
@@ -98,7 +98,7 @@ describe("NodeValidator", () => {
       data: { field: "event.amount", operator: "CONTAINS", value: "500" },
     };
     const errors = new NodeValidator().validateConditionNode(node as Extract<ConditionFlowNode, { type: "conditionNode" }>);
-    expect(errors.some((e) => e.field === "operator" && e.severity === "error")).toBe(true);
+    expect(errors.some((e) => e.field === "operator" && e.severity === "error")).toBe(false);
   });
 
   it("validates BETWEEN shape", () => {

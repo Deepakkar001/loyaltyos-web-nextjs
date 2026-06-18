@@ -1,11 +1,12 @@
 import type { ComparisonOp, ConditionField, ConditionGroup, ConditionNode, ConditionTreeDraft, LeafCondition, LogicalOp, NotNode } from "../condition-builder/types";
 import type { ConditionFlowEdge, ConditionFlowNode, ValidationError } from "./types";
-import { FIELD_METADATA } from "./types";
+import { FIELD_METADATA, getConditionBranchLabel } from "./types";
 import { GraphValidator, NodeValidator } from "./validator";
 
 type BuildOpts = {
   /** event node id is derived if omitted */
   eventNodeId?: string;
+  fieldMetadata?: Record<string, { type: "number" | "string" | "datetime" | "enum" }>;
 };
 
 function stableIdFromPath(parts: Array<string | number>) {
@@ -32,9 +33,16 @@ function not(node: ConditionNode, id: string): NotNode {
   return { id, kind: "not", node };
 }
 
-function leaf(field: ConditionField, op: ComparisonOp, value: unknown, id: string): LeafCondition {
-  const meta = FIELD_METADATA[field];
-  const normalized = normalizeValue(value, op, field, meta.type);
+function leaf(
+  field: ConditionField,
+  op: ComparisonOp,
+  value: unknown,
+  id: string,
+  fieldMetadata: Record<string, { type: "number" | "string" | "datetime" | "enum" }>
+): LeafCondition {
+  const meta = fieldMetadata[field];
+  const type = meta?.type ?? "string";
+  const normalized = normalizeValue(value, op, type);
   return {
     id,
     kind: "leaf",
@@ -44,12 +52,20 @@ function leaf(field: ConditionField, op: ComparisonOp, value: unknown, id: strin
   };
 }
 
-function literalToNode(l: Literal, idBase: string): ConditionNode {
-  const base = leaf(l.field, l.op, l.value, `${idBase}:leaf`);
+function literalToNode(
+  l: Literal,
+  idBase: string,
+  fieldMetadata: Record<string, { type: "number" | "string" | "datetime" | "enum" }>
+): ConditionNode {
+  const base = leaf(l.field, l.op, l.value, `${idBase}:leaf`, fieldMetadata);
   return l.negated ? not(base, `${idBase}:not`) : base;
 }
 
-function normalizeValue(input: unknown, operator: ComparisonOp, field: ConditionField, type: "number" | "string" | "datetime"): LeafCondition["value"] {
+function normalizeValue(
+  input: unknown,
+  operator: ComparisonOp,
+  type: "number" | "string" | "datetime" | "enum"
+): LeafCondition["value"] {
   // Deterministic normalization for backend SpEL parser:
   // - numbers: Number(...)
   // - datetime: keep string (backend expects string literals; do not auto-ISO to avoid surprising rewrites)
@@ -80,8 +96,8 @@ function normalizeValue(input: unknown, operator: ComparisonOp, field: Condition
 function outgoingSorted(edges: ConditionFlowEdge[], sourceId: string) {
   const outs = edges.filter((e) => e.source === sourceId);
   return outs.sort((a, b) => {
-    const la = a.data?.label ?? "";
-    const lb = b.data?.label ?? "";
+    const la = getConditionBranchLabel(a) ?? "";
+    const lb = getConditionBranchLabel(b) ?? "";
     const labelRank = (l: string) => (l === "yes" ? 0 : l === "no" ? 1 : 2);
     const r = labelRank(la) - labelRank(lb);
     if (r !== 0) return r;
@@ -96,9 +112,10 @@ function findSingleEvent(nodes: ConditionFlowNode[]): ConditionFlowNode | undefi
 
 export class RuleTreeBuilder {
   buildTree(nodes: ConditionFlowNode[], edges: ConditionFlowEdge[], opts: BuildOpts = {}): { tree: ConditionTreeDraft; errors: ValidationError[] } {
+    const fieldMetadata = opts.fieldMetadata ?? FIELD_METADATA;
     const graphErrors = new GraphValidator().validateGraph(nodes, edges);
 
-    const nodeValidator = new NodeValidator();
+    const nodeValidator = new NodeValidator(fieldMetadata);
     const nodeErrors: ValidationError[] = [];
     for (const n of nodes) {
       if (n.type === "conditionNode") {
@@ -125,13 +142,27 @@ export class RuleTreeBuilder {
     }
 
     const outs = outgoingSorted(edges, eventNode.id);
-    if (outs.length === 0) return { tree: { kind: "everyone" }, errors: allErrors };
+    if (outs.length === 0) {
+      return {
+        tree: { kind: "everyone" },
+        errors: [
+          ...allErrors,
+          {
+            id: "event_no_outgoing",
+            nodeId: eventNode.id,
+            severity: "error" as const,
+            message: "Connect the Event node to the first step in your flow (e.g. a Condition).",
+            suggestedFix: "Draw one arrow from Event to your Condition node.",
+          },
+        ],
+      };
+    }
 
     const nodeMap = new Map(nodes.map((n) => [n.id, n] as const));
 
     // Deterministic DP: compute conjunction sets reaching each node from the event.
     // Each conjunction is a list of Literals (DNF representation).
-    const dp = this.computeDnfFromEvent(eventNode.id, nodes, edges, nodeMap);
+    const dp = this.computeDnfFromEvent(eventNode.id, nodes, edges, nodeMap, fieldMetadata);
 
     // Only branches that end in a "real" action qualify the rule.
     // The diagram uses a dedicated noop terminal for reject/no-match paths,
@@ -176,7 +207,7 @@ export class RuleTreeBuilder {
         // A path with no predicates => always true => everyone
         return { id: stableIdFromPath(["true", idx]), kind: "group", op: "AND", nodes: [] };
       }
-      const nodes = conj.map((l, j) => literalToNode(l, stableIdFromPath(["lit", idx, j])));
+      const nodes = conj.map((l, j) => literalToNode(l, stableIdFromPath(["lit", idx, j]), fieldMetadata));
       return group("AND", nodes, stableIdFromPath(["and", idx]));
     });
 
@@ -192,7 +223,7 @@ export class RuleTreeBuilder {
           {
             id: "unfiltered_path_to_award",
             nodeId: "event",
-            severity: "error",
+            severity: "error" as const,
             message:
               "Every event would earn points: at least one path reaches Award Points without passing through any condition.",
             suggestedFix:
@@ -212,7 +243,8 @@ export class RuleTreeBuilder {
     eventId: string,
     nodes: ConditionFlowNode[],
     edges: ConditionFlowEdge[],
-    nodeMap: Map<string, ConditionFlowNode>
+    nodeMap: Map<string, ConditionFlowNode>,
+    fieldMetadata: Record<string, { type: "number" | "string" | "datetime" | "enum" }>
   ): Map<string, Literal[][]> {
     const incomingByTarget = new Map<string, ConditionFlowEdge[]>();
     const outgoingBySource = new Map<string, ConditionFlowEdge[]>();
@@ -257,13 +289,38 @@ export class RuleTreeBuilder {
       return acc;
     };
 
+    const literalsAlongConditionEdge = (cond: ConditionFlowNode, edge: ConditionFlowEdge): Literal[][] => {
+      if (cond.type !== "conditionNode") return [];
+      const field = cond.data.field as ConditionField;
+      const op = cond.data.operator as ComparisonOp;
+      const meta = fieldMetadata[field];
+      if (!meta) return [];
+      const value = op === "IS_NULL" || op === "IS_NOT_NULL" ? undefined : cond.data.value;
+      const base: Literal = { field, op, value, negated: !!cond.data.negate };
+      const yesLit = base;
+      const noLit: Literal = { ...base, negated: !base.negated };
+      const branch = getConditionBranchLabel(edge);
+      const here = dp.get(cond.id) ?? [];
+      if (branch === "yes") return here.map((c) => [...c, yesLit]);
+      if (branch === "no") return here.map((c) => [...c, noLit]);
+      return [];
+    };
+
     for (const id of order) {
       const node = nodeMap.get(id);
       if (!node) continue;
 
       if (id !== eventId) {
         const ins = (incomingByTarget.get(id) ?? []).sort((a, b) => a.source.localeCompare(b.source));
-        const incomingLists: Literal[][][] = ins.map((e) => dp.get(e.source) ?? []);
+        // dp(condition) is conjunctions *before* that node evaluates; merging it at downstream
+        // nodes wrongly treated Award as reachable with no literals. Expand per incoming edge.
+        const incomingLists: Literal[][][] = ins.map((e) => {
+          const src = nodeMap.get(e.source);
+          if (src?.type === "conditionNode") {
+            return literalsAlongConditionEdge(src, e);
+          }
+          return dp.get(e.source) ?? [];
+        });
 
         if (node.type === "logicNode") {
           dp.set(id, node.data.logic === "AND" ? mergeAnd(incomingLists) : mergeOr(incomingLists));
@@ -278,24 +335,7 @@ export class RuleTreeBuilder {
       const here = dp.get(id) ?? [];
 
       if (node.type === "conditionNode") {
-        const field = node.data.field as ConditionField;
-        const op = node.data.operator as ComparisonOp;
-        const meta = FIELD_METADATA[field];
-        if (!meta) continue;
-        const value = op === "IS_NULL" || op === "IS_NOT_NULL" ? undefined : node.data.value;
-        const base: Literal = { field, op, value, negated: !!node.data.negate };
-        const yesLit = base;
-        const noLit: Literal = { ...base, negated: !base.negated };
-
-        for (const e of outs) {
-          if (e.data?.label === "yes") {
-            dp.set(e.target, [...(dp.get(e.target) ?? []), ...here.map((c) => [...c, yesLit])]);
-          } else if (e.data?.label === "no") {
-            dp.set(e.target, [...(dp.get(e.target) ?? []), ...here.map((c) => [...c, noLit])]);
-          } else {
-            // Unlabeled outgoing from condition should not exist; validation will catch.
-          }
-        }
+        // Downstream DNF is applied when each target merges incoming edges (see literalsAlongConditionEdge).
         continue;
       }
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFieldArray, useForm, type Control, type UseFormRegister, type UseFormSetValue, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -10,12 +10,17 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "../FormField";
 import { StepHeader } from "../StepHeader";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { STATUS_TO_STEP } from "@/types/onboarding";
 import { onboardingApi, programmeApiV2, ApiError, ensureAuthSession } from "@/lib/api/client";
 import type { OnboardingSelectOption } from "@/types/onboarding";
+import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-helpers";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChevronDown, Plus, Trash2, Trophy, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { FieldHelp } from "@/components/ui/field-help";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PillToggle } from "@/components/ui/pill-toggle";
 
 const PRESETS = {
   RETAIL: {
@@ -109,6 +114,83 @@ const customFieldSchema = z.object({
   required: z.boolean(),
 });
 
+const eventCoreFieldSchema = z.object({
+  name: z.string().min(1).max(64).regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "Use letters, numbers, underscores"),
+  type: z.enum(["string", "number", "integer", "boolean", "date-time", "object"]),
+  required: z.boolean(),
+});
+
+const eventDefinitionSchema = z.object({
+  eventType: z
+    .string()
+    .min(1, "Event type is required")
+    .max(128)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, numbers, dots, dashes, underscores"),
+  coreFields: z.array(eventCoreFieldSchema).min(1, "Add at least one field for this event"),
+});
+
+const DEFAULT_EVENT_DEFINITIONS: z.infer<typeof eventDefinitionSchema>[] = [
+  {
+    eventType: "PURCHASE",
+    coreFields: [
+      { name: "transactionId", type: "string", required: true },
+      { name: "timestamp", type: "date-time", required: true },
+      { name: "eventType", type: "string", required: true },
+      { name: "customerId", type: "string", required: true },
+      { name: "amount", type: "number", required: true },
+    ],
+  },
+];
+
+function parseStoredEventDefinitions(eventSchema: Record<string, unknown>): z.infer<typeof eventDefinitionSchema>[] {
+  const safeArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  const safeObj = (v: unknown): Record<string, unknown> =>
+    v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  const eds = safeArr(eventSchema.eventDefinitions);
+  if (eds.length) {
+    const out: z.infer<typeof eventDefinitionSchema>[] = [];
+    for (const raw of eds) {
+      const o = safeObj(raw);
+      const eventType = String(o.eventType ?? "").trim();
+      const cfs = safeArr(o.coreFields);
+      const coreFields = cfs
+        .map((cf) => {
+          const f = safeObj(cf);
+          const tn = String(f.type ?? "string");
+          const type =
+            tn === "string" || tn === "number" || tn === "integer" || tn === "boolean" || tn === "date-time" || tn === "object"
+              ? tn
+              : "string";
+          const name = String(f.name ?? "").trim();
+          if (!name) return null;
+          return { name, type: type as z.infer<typeof eventCoreFieldSchema>["type"], required: Boolean(f.required) };
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null);
+      if (eventType && coreFields.length) out.push({ eventType, coreFields });
+    }
+    if (out.length) return out;
+  }
+  const std = safeArr(eventSchema.standardFields);
+  const coreFields = std
+    .map((cf) => {
+      const f = safeObj(cf);
+      const tn = String(f.type ?? "string");
+      const type =
+        tn === "string" || tn === "number" || tn === "integer" || tn === "boolean" || tn === "date-time" || tn === "object"
+          ? tn
+          : "string";
+      const name = String(f.name ?? "").trim();
+      if (!name) return null;
+      return { name, type: type as z.infer<typeof eventCoreFieldSchema>["type"], required: Boolean(f.required) };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null);
+  if (coreFields.length) return [{ eventType: "PURCHASE", coreFields }];
+  return DEFAULT_EVENT_DEFINITIONS.map((d) => ({
+    eventType: d.eventType,
+    coreFields: d.coreFields.map((c) => ({ ...c })),
+  }));
+}
+
 const schema = z
   .object({
   programmeUid: z.string().min(1),
@@ -144,12 +226,30 @@ const schema = z
   breakageIncludeTierBreakdown: z.boolean(),
   breakageIncludeProgrammeBreakdown: z.boolean(),
   eventSchemaBackwardCompatibilityDays: z.number().int().min(0).max(365),
+  eventDefinitions: z.array(eventDefinitionSchema).min(1).max(25),
   customFields: z.array(customFieldSchema),
   webhookEndpoint: z.string().url("Enter a valid HTTPS URL").or(z.literal("")),
 })
   .refine(
     (d) => !d.breakageExportEnabled || Boolean(d.breakageExportFormatsCsv && d.breakageExportFormatsCsv.trim().length),
     { message: "Select at least one export format", path: ["breakageExportFormatsCsv"] }
+  )
+  .refine(
+    (d) => {
+      const keys = d.eventDefinitions.map((e) => e.eventType.trim().toUpperCase());
+      return new Set(keys).size === keys.length;
+    },
+    { message: "Each event type must be unique", path: ["eventDefinitions"] }
+  )
+  .refine(
+    (d) => {
+      for (const ev of d.eventDefinitions) {
+        const names = ev.coreFields.map((f) => f.name.trim().toLowerCase()).filter(Boolean);
+        if (new Set(names).size !== names.length) return false;
+      }
+      return true;
+    },
+    { message: "Field names must be unique within each event type", path: ["eventDefinitions"] }
   );
 
 type FormData = z.infer<typeof schema>;
@@ -195,51 +295,165 @@ const CONFIG_STEP_FIELD_GROUPS: Array<Array<keyof FormData>> = [
   ],
   [
     "eventSchemaBackwardCompatibilityDays",
+    "eventDefinitions",
     "customFields",
     "webhookEndpoint",
   ],
 ];
 
-function NativeSelect({
-  ariaLabel,
-  value,
-  onChange,
-  options,
-  className,
-  disabled,
+function unionStandardFieldsFromEventDefinitions(defs: z.infer<typeof eventDefinitionSchema>[]) {
+  const map = new Map<string, { name: string; type: z.infer<typeof eventCoreFieldSchema>["type"]; required: boolean }>();
+  for (const def of defs) {
+    for (const f of def.coreFields) {
+      const key = f.name.trim();
+      if (!key) continue;
+      const prev = map.get(key);
+      if (!prev) {
+        map.set(key, { name: key, type: f.type, required: f.required });
+      } else {
+        map.set(key, { name: key, type: f.type, required: prev.required || f.required });
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+function EventDefinitionCoreFields({
+  nestIndex,
+  control,
+  register,
+  setValue,
+  watch,
 }: {
-  ariaLabel: string;
-  value: string;
-  onChange: (next: string) => void;
-  options: Array<{ value: string; label: string }>;
-  className?: string;
-  disabled?: boolean;
+  nestIndex: number;
+  control: Control<FormData>;
+  register: UseFormRegister<FormData>;
+  setValue: UseFormSetValue<FormData>;
+  watch: UseFormWatch<FormData>;
+}) {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `eventDefinitions.${nestIndex}.coreFields`,
+  });
+
+  return (
+    <div className="space-y-2 pl-0 sm:pl-3 border-l-2 border-border/50">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Fields in payload</p>
+      {fields.map((row, i) => (
+        <div
+          key={row.id}
+          className="flex flex-col lg:flex-row lg:items-center gap-2 p-3 rounded-xl border border-border/70 bg-[var(--surface-sunken)]"
+        >
+          <Input
+            className="h-8 lg:w-44"
+            placeholder="fieldName"
+            {...register(`eventDefinitions.${nestIndex}.coreFields.${i}.name` as const)}
+          />
+          <NativeSelect
+            ariaLabel="Field type"
+            variant="compact"
+            className="lg:w-40"
+            value={watch(`eventDefinitions.${nestIndex}.coreFields.${i}.type`)}
+            onChange={(v) => {
+              const t =
+                v === "string" ||
+                v === "number" ||
+                v === "integer" ||
+                v === "boolean" ||
+                v === "date-time" ||
+                v === "object"
+                  ? v
+                  : "string";
+              setValue(`eventDefinitions.${nestIndex}.coreFields.${i}.type`, t);
+            }}
+            options={[
+              { value: "string", label: "string" },
+              { value: "number", label: "number" },
+              { value: "integer", label: "integer" },
+              { value: "boolean", label: "boolean" },
+              { value: "date-time", label: "date-time" },
+              { value: "object", label: "object" },
+            ]}
+          />
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 lg:min-w-[200px]">
+            <span className="text-sm font-medium text-foreground">
+              {watch(`eventDefinitions.${nestIndex}.coreFields.${i}.required`) ? "Required" : "Optional"}
+            </span>
+            <PillToggle
+              pressed={watch(`eventDefinitions.${nestIndex}.coreFields.${i}.required`)}
+              onPressedChange={(v) => setValue(`eventDefinitions.${nestIndex}.coreFields.${i}.required`, v)}
+              srLabel={
+                watch(`eventDefinitions.${nestIndex}.coreFields.${i}.required`)
+                  ? "Turn off: mark core field as optional"
+                  : "Turn on: mark core field as required"
+              }
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => remove(i)}
+            className="lg:ml-auto text-slate-400 hover:text-red-500 transition-colors"
+            aria-label="Remove field"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full border-dashed text-slate-500"
+        onClick={() => append({ name: "", type: "string", required: false })}
+      >
+        <Plus className="w-3.5 h-3.5 mr-2" />
+        Add core field
+      </Button>
+    </div>
+  );
+}
+
+function EventDefinitionCard({
+  index,
+  control,
+  register,
+  setValue,
+  watch,
+  removeEvent,
+  canRemove,
+}: {
+  index: number;
+  control: Control<FormData>;
+  register: UseFormRegister<FormData>;
+  setValue: UseFormSetValue<FormData>;
+  watch: UseFormWatch<FormData>;
+  removeEvent: () => void;
+  canRemove: boolean;
 }) {
   return (
-    <div className={cn("relative", className)}>
-      <select
-        aria-label={ariaLabel}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className={cn(
-          "h-9 w-full cursor-pointer appearance-none rounded-lg border border-input bg-background px-3 pr-9 text-sm text-foreground",
-          "[color-scheme:light] dark:[color-scheme:dark]",
-          "outline-none transition-colors",
-          "focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:bg-input/30 dark:focus-visible:ring-offset-background",
-          "disabled:cursor-not-allowed disabled:opacity-50"
-        )}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-        aria-hidden
-      />
+    <div className="rounded-xl border border-border/70 bg-background p-4 space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="space-y-1 flex-1 min-w-0">
+          <label className="text-xs font-semibold text-muted-foreground" htmlFor={`event-type-${index}`}>
+            Event type key
+          </label>
+          <Input
+            id={`event-type-${index}`}
+            className="h-9 max-w-md"
+            placeholder="e.g. PURCHASE, REFUND, LOGIN"
+            {...register(`eventDefinitions.${index}.eventType` as const)}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Must match the <code className="text-foreground">eventType</code> value your systems send on the wire.
+          </p>
+        </div>
+        {canRemove ? (
+          <Button type="button" variant="ghost" size="sm" className="text-red-600 shrink-0" onClick={removeEvent}>
+            Remove event
+          </Button>
+        ) : null}
+      </div>
+      <EventDefinitionCoreFields nestIndex={index} control={control} register={register} setValue={setValue} watch={watch} />
     </div>
   );
 }
@@ -247,8 +461,10 @@ function NativeSelect({
 export function Step4Programme() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { tenantId, setProgrammeData, setSubmitting, isSubmitting, syncStatusFromBackend } =
+  const { tenantId, onboardingStatus, setProgrammeData, setSubmitting, isSubmitting, syncStatusFromBackend } =
     useOnboardingStore();
+  const isPostGoLiveEdit =
+    onboardingStatus != null && STATUS_TO_STEP[onboardingStatus] === "complete";
   const [tiersEnabled, setTiersEnabled] = useState(true);
   const [programmes, setProgrammes] = useState<Array<{ programmeUid: string; name: string }>>([
     { programmeUid: "default", name: "Default programme" },
@@ -256,8 +472,14 @@ export function Step4Programme() {
   const [loadingProgrammes, setLoadingProgrammes] = useState(false);
   const [timezoneOptions, setTimezoneOptions] = useState<OnboardingSelectOption[]>([]);
   const [timezoneLoading, setTimezoneLoading] = useState(false);
+  const [newProgrammeDialogOpen, setNewProgrammeDialogOpen] = useState(false);
+  const [newProgrammeNameDraft, setNewProgrammeNameDraft] = useState("");
+  const [creatingProgramme, setCreatingProgramme] = useState(false);
   type ConfigStep = 0 | 1 | 2 | 3;
   const [configStep, setConfigStep] = useState<ConfigStep>(0);
+  /** Prevents accidental form submit (e.g. Enter in inputs) before the final wizard step. */
+  const configStepRef = useRef<ConfigStep>(0);
+  configStepRef.current = configStep;
 
   const STEP_META: Array<{ title: string; subtitle: string }> = [
     {
@@ -273,8 +495,9 @@ export function Step4Programme() {
       subtitle: "Points expiry model, breakage frequency, exports, breakdowns.",
     },
     {
-      title: "Events & Webhook",
-      subtitle: "Event schema (custom fields), backward compatibility, sandbox webhook.",
+      title: "Events",
+      subtitle:
+        "Per-event type core fields, optional custom fields, and backward compatibility window.",
     },
   ];
 
@@ -328,6 +551,10 @@ export function Step4Programme() {
       breakageIncludeTierBreakdown: true,
       breakageIncludeProgrammeBreakdown: true,
       eventSchemaBackwardCompatibilityDays: 30,
+      eventDefinitions: DEFAULT_EVENT_DEFINITIONS.map((d) => ({
+        eventType: d.eventType,
+        coreFields: d.coreFields.map((c) => ({ ...c })),
+      })),
       customFields: [],
       webhookEndpoint: "",
     },
@@ -344,6 +571,12 @@ export function Step4Programme() {
     append: appendCustomField,
     remove: removeCustomField,
   } = useFieldArray({ control, name: "customFields" });
+
+  const {
+    fields: eventDefinitionFields,
+    append: appendEventDefinition,
+    remove: removeEventDefinition,
+  } = useFieldArray({ control, name: "eventDefinitions" });
 
   const selectedProgrammeUid = watch("programmeUid");
   const welcomeBonusEnabled = watch("welcomeBonusEnabled");
@@ -383,10 +616,7 @@ export function Step4Programme() {
       try {
         const list = await programmeApiV2.listProgrammes();
         if (cancelled) return;
-        const base = [{ programmeUid: "default", name: "Default programme" }];
-        const extra = (list ?? []).map((p) => ({ programmeUid: p.programmeUid, name: p.name }));
-        const seen = new Set<string>();
-        const merged = [...base, ...extra].filter((p) => (seen.has(p.programmeUid) ? false : (seen.add(p.programmeUid), true)));
+        const merged = mergeProgrammeDropdownRows(list);
         setProgrammes(merged);
         const requestedUid = searchParams?.get("programmeUid");
         if (requestedUid && merged.some((p) => p.programmeUid === requestedUid)) {
@@ -403,10 +633,43 @@ export function Step4Programme() {
     };
   }, [tenantId, searchParams, setValue]);
 
+  const refreshProgrammeList = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const list = await programmeApiV2.listProgrammes();
+      setProgrammes(mergeProgrammeDropdownRows(list));
+    } catch {
+      // non-blocking: keep existing dropdown rows
+    }
+  }, [tenantId]);
+
+  const createNewProgramme = useCallback(async () => {
+    const trimmed = newProgrammeNameDraft.trim();
+    if (trimmed.length < 2) {
+      toast.error("Enter a programme name (at least 2 characters).");
+      return;
+    }
+    setCreatingProgramme(true);
+    try {
+      await ensureAuthSession();
+      const created = await programmeApiV2.createProgramme({ name: trimmed });
+      await refreshProgrammeList();
+      setValue("programmeUid", created.programmeUid);
+      setValue("programmeName", trimmed);
+      setNewProgrammeDialogOpen(false);
+      setNewProgrammeNameDraft("");
+      toast.success("Programme created");
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Could not create programme");
+    } finally {
+      setCreatingProgramme(false);
+    }
+  }, [newProgrammeNameDraft, refreshProgrammeList, setValue]);
+
   useEffect(() => {
     if (!tenantId) return;
     if (!selectedProgrammeUid) return;
-    if (selectedProgrammeUid === "default") return; // default configured via legacy + v2 upsert on save
     let cancelled = false;
     (async () => {
       try {
@@ -464,10 +727,11 @@ export function Step4Programme() {
                 rank: Number(o.rank ?? idx + 1),
                 entryThreshold: Number(o.entryThreshold ?? 0),
                 maintenanceThreshold: Number(o.maintenanceThreshold ?? 0),
+                maxPoints: o.maxPoints == null ? null : Number(o.maxPoints),
                 multiplier: Number(o.multiplier ?? 1),
                 expiryExtensionMonths:
                   o.expiryExtensionMonths == null ? null : Number(o.expiryExtensionMonths),
-              benefits: [],
+                benefits: [],
               };
             })
           );
@@ -516,6 +780,7 @@ export function Step4Programme() {
             })
           );
         }
+        setValue("eventDefinitions", parseStoredEventDefinitions(eventSchema));
       } catch {
         // ignore
       }
@@ -549,6 +814,8 @@ export function Step4Programme() {
 
   const onSubmit = async (data: FormData) => {
     if (!tenantId) return;
+    // Only the explicit "Save Configuration" action should persist. Enter in inputs must not trigger save.
+    if (configStepRef.current !== 3) return;
     setSubmitting(true);
     try {
       // 1) Legacy save (required for onboarding state + tier_definitions). Applies to default programme.
@@ -596,7 +863,21 @@ export function Step4Programme() {
         .map((s) => s.trim().toUpperCase())
         .filter(Boolean);
 
+      const evDefs = data.eventDefinitions.map((d) => ({
+        eventType: d.eventType.trim(),
+        coreFields: d.coreFields.map((f) => ({
+          name: f.name.trim(),
+          type: f.type,
+          required: f.required,
+        })),
+      }));
+
+      // Preserve sections managed elsewhere (e.g. rewardCatalog on Rewards Catalog page).
+      const freshConfig = await programmeApiV2.getProgrammeConfig(data.programmeUid);
+      const existingRoot = (freshConfig.config ?? {}) as Record<string, unknown>;
+
       const programmeConfig = {
+        ...existingRoot,
         programmeIdentity: {
           programmeName: data.programmeName,
           pointsName: data.pointsName,
@@ -663,14 +944,9 @@ export function Step4Programme() {
           },
         },
         eventSchema: {
-          version: 1,
-          standardFields: [
-            { name: "eventType", type: "string", required: true },
-            { name: "amount", type: "number", required: true },
-            { name: "transactionId", type: "string", required: true },
-            { name: "timestamp", type: "date-time", required: true },
-            { name: "customerId", type: "string", required: true },
-          ],
+          version: 2,
+          eventDefinitions: evDefs,
+          standardFields: unionStandardFieldsFromEventDefinitions(evDefs),
           customFields: data.customFields,
           backwardCompatibilityDays: data.eventSchemaBackwardCompatibilityDays,
         },
@@ -682,16 +958,22 @@ export function Step4Programme() {
 
       await programmeApiV2.upsertProgrammeConfig(data.programmeUid, { config: programmeConfig });
 
+      await refreshProgrammeList();
+
       setProgrammeData({
         programmeName: data.programmeName,
         pointsName: data.pointsName,
       });
-      // Guided flow: after configuration is saved, go to Rules Setup.
-      // Status progression:
-      // - backend transitions AGREEMENT_SIGNED → CONFIGURED when config is saved (default via legacy; non-default via v2)
-      syncStatusFromBackend("CONFIGURED");
-      toast.success("Programme configured successfully!");
-      router.replace("/dashboard/loyalty-rules/create/basic-info");
+
+      if (isPostGoLiveEdit) {
+        toast.success("Configuration saved successfully.");
+        router.replace("/dashboard/configure/my-configurations");
+      } else {
+        // Guided setup: backend transitions AGREEMENT_SIGNED → CONFIGURED on save.
+        syncStatusFromBackend("CONFIGURED");
+        toast.success("Programme configured successfully!");
+        router.replace("/dashboard/loyalty-rules/create/basic-info");
+      }
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
     } finally {
@@ -731,45 +1013,40 @@ export function Step4Programme() {
     toast.error("Please fix the highlighted fields and try again.");
   };
 
-  const PillToggle = ({
-    pressed,
-    onPressedChange,
-    srLabel,
-    size = "md",
-  }: {
-    pressed: boolean;
-    onPressedChange: (next: boolean) => void;
-    srLabel: string;
-    size?: "sm" | "md";
-  }) => (
-    <button
-      type="button"
-      onClick={() => onPressedChange(!pressed)}
-      aria-pressed={pressed}
-      className={cn(
-        "relative inline-flex shrink-0 items-center rounded-full border transition-colors",
-        size === "sm" ? "h-7 w-[44px]" : "h-8 w-[52px]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        pressed ? "border-primary/50 bg-primary" : "border-border bg-muted"
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute left-1 top-1 rounded-full shadow-sm ring-1 ring-black/5 transition-transform",
-          size === "sm" ? "h-5 w-5" : "h-6 w-6",
-          "dark:ring-white/10",
-          pressed
-            ? cn("bg-amber-300", size === "sm" ? "translate-x-4" : "translate-x-5")
-            : "bg-slate-300 dark:bg-slate-300 translate-x-0"
-        )}
-      />
-      <span className="sr-only">{srLabel}</span>
-    </button>
-  );
-
   return (
     <div className="w-full">
+      <Dialog open={newProgrammeDialogOpen} onOpenChange={setNewProgrammeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New programme</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This name appears in the programme list and can match your public loyalty programme name. You can refine it
+            in Identity & Economics.
+          </p>
+          <Input
+            autoFocus
+            placeholder="e.g. North Region Rewards"
+            value={newProgrammeNameDraft}
+            onChange={(e) => setNewProgrammeNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createNewProgramme();
+              }
+            }}
+          />
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setNewProgrammeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={creatingProgramme} onClick={() => void createNewProgramme()}>
+              {creatingProgramme ? "Creating…" : "Create programme"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <StepHeader
         badge="Step 4 of 6"
         title="Configure your programme"
@@ -809,16 +1086,9 @@ export function Step4Programme() {
               variant="outline"
               size="sm"
               className="w-full sm:w-auto"
-              onClick={async () => {
-                try {
-                  await ensureAuthSession();
-                  const created = await programmeApiV2.createProgramme({ name: `Programme ${programmes.length}` });
-                  setProgrammes((prev) => [...prev, { programmeUid: created.programmeUid, name: created.name }]);
-                  setValue("programmeUid", created.programmeUid);
-                  toast.success("Programme created");
-                } catch (e) {
-                  if (e instanceof ApiError) toast.error(e.message);
-                }
+              onClick={() => {
+                setNewProgrammeNameDraft("");
+                setNewProgrammeDialogOpen(true);
               }}
             >
               <Plus className="w-3.5 h-3.5 mr-2" /> New programme
@@ -852,7 +1122,12 @@ export function Step4Programme() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+      <form
+        className="space-y-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
         {/* Configure stepper */}
         <div className="rounded-2xl border border-border/70 bg-card/60 p-3 sm:p-4">
           <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -1486,89 +1761,68 @@ export function Step4Programme() {
           </div>
         </div>
 
-        {/* Step 4: Event Schema & Webhook */}
+        {/* Step 4: Event Schema */}
         <div className={cn(configStep === 3 ? "space-y-6" : "hidden")}>
           <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Event Schema (custom fields)
           </h3>
 
-          <div className="rounded-xl border border-border/70 bg-[var(--surface-sunken)] p-4">
-            <p className="text-sm font-semibold">Mandatory fields to process events</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              These are the fields LoyaltyOS needs to run the rule engine, compute rewards, handle refunds/reversals,
-              and safely avoid duplicate processing. Custom fields are optional extras you can add below.
-            </p>
-
-            {(
-              [
-                {
-                  title: "Core required (always)",
-                  tone: "emerald",
-                  fields: [
-                    { name: "transactionId", type: "string", example: "txn_123" },
-                    { name: "timestamp", type: "date-time", example: "2026-05-06T10:00:00Z" },
-                    { name: "eventType", type: "string", example: "PURCHASE" },
-                    { name: "customerId", type: "string", example: "cust_123" },
-                    { name: "amount", type: "number", example: "1000" },
+          <div className="rounded-xl border border-border/70 bg-[var(--surface-sunken)] p-4 space-y-4">
+            <div>
+              <p className="text-sm font-semibold">Event types and core payload</p>
+              <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                For each <strong>event type</strong> your systems emit (for example <code className="text-foreground">PURCHASE</code> or{" "}
+                <code className="text-foreground">REFUND</code>), declare which fields appear on the JSON payload. Mark a field
+                required only when every producer will send it—required fields are enforced in sandbox validation and rule
+                conditions. A combined field list is stored automatically for backwards compatibility with the rule engine.
+              </p>
+            </div>
+            {errors.eventDefinitions &&
+            typeof errors.eventDefinitions === "object" &&
+            "message" in errors.eventDefinitions &&
+            typeof (errors.eventDefinitions as { message?: string }).message === "string" ? (
+              <p className="text-xs text-red-600">{(errors.eventDefinitions as { message: string }).message}</p>
+            ) : null}
+            <div className="space-y-4">
+              {eventDefinitionFields.map((ed, idx) => (
+                <EventDefinitionCard
+                  key={ed.id}
+                  index={idx}
+                  control={control}
+                  register={register}
+                  setValue={setValue}
+                  watch={watch}
+                  removeEvent={() => removeEventDefinition(idx)}
+                  canRemove={eventDefinitionFields.length > 1}
+                />
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full border-dashed text-slate-500"
+              onClick={() =>
+                appendEventDefinition({
+                  eventType: `EVENT_${eventDefinitionFields.length + 1}`,
+                  coreFields: [
+                    { name: "transactionId", type: "string", required: true },
+                    { name: "eventType", type: "string", required: true },
                   ],
-                },
-                {
-                  title: "Strongly recommended (common setups)",
-                  tone: "blue",
-                  fields: [
-                    { name: "programmeUid", type: "string", example: "default" },
-                    { name: "channel", type: "string", example: "POS" },
-                    { name: "currency", type: "string", example: "INR" },
-                  ],
-                },
-                {
-                  title: "Required for REFUND / REVERSAL events",
-                  tone: "amber",
-                  fields: [
-                    { name: "status", type: "string", example: "SUCCESS" },
-                    { name: "originalTransactionId", type: "string", example: "txn_123" },
-                  ],
-                },
-              ] as const
-            ).map((group) => (
-              <div key={group.title} className="mt-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                    {group.title}
-                  </p>
-                  <span
-                    className={cn(
-                      "text-[10px] font-semibold uppercase tracking-widest rounded-full px-2 py-0.5 border",
-                      group.tone === "emerald" &&
-                        "text-emerald-700 bg-emerald-50 border-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-900",
-                      group.tone === "blue" &&
-                        "text-brand-700 bg-brand-50 border-brand-100 dark:bg-brand-950/40 dark:text-brand-200 dark:border-brand-900/50",
-                      group.tone === "amber" &&
-                        "text-amber-800 bg-amber-50 border-amber-100 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-900"
-                    )}
-                  >
-                    required
-                  </span>
-                </div>
+                })
+              }
+            >
+              <Plus className="w-3.5 h-3.5 mr-2" />
+              Add another event type
+            </Button>
 
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {group.fields.map((f) => (
-                    <div key={f.name} className="rounded-lg border border-border bg-background px-3 py-2">
-                      <p className="text-xs font-semibold text-foreground">{f.name}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        type: <span className="font-medium text-foreground">{f.type}</span>
-                        {" · "}
-                        example: <span className="font-medium text-foreground">{f.example}</span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            <details className="mt-4">
-              <summary className="text-xs text-muted-foreground cursor-pointer">Example payloads (PURCHASE + REFUND)</summary>
+            <details className="mt-2">
+              <summary className="text-xs text-muted-foreground cursor-pointer">Example payloads (reference)</summary>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Your actual required keys depend on the fields you marked required above. These samples show a typical retail
+                purchase and refund shape.
+              </p>
               <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <pre className="text-xs overflow-auto rounded-xl border border-border bg-background p-3">
 {`{
@@ -1623,6 +1877,7 @@ export function Step4Programme() {
                 />
                 <NativeSelect
                   ariaLabel="Field type"
+                  variant="compact"
                   className="md:w-40"
                   value={watch(`customFields.${index}.type`)}
                   onChange={(v) => {
@@ -1650,19 +1905,25 @@ export function Step4Programme() {
                   text="Field type controls how LoyaltyOS validates this value (and which operators you can use in conditions). Example: channel = string, amount = number, isInternational = boolean."
                   label="Custom field type help"
                 />
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 min-w-[200px]">
+                  <span className="text-sm font-medium text-foreground">
+                    {watch(`customFields.${index}.required`) ? "Required" : "Optional"}
+                  </span>
                   <PillToggle
                     size="sm"
                     pressed={watch(`customFields.${index}.required`)}
                     onPressedChange={(v) => setValue(`customFields.${index}.required`, v)}
-                    srLabel={watch(`customFields.${index}.required`) ? "Mark field as optional" : "Mark field as required"}
-                  />
-                  <span className="text-xs text-slate-500">Required</span>
-                  <FieldHelp
-                    text="If required, every event must include this field. Keep fields optional unless rules/analytics truly depend on them—required fields can break ingestion if a source forgets to send them."
-                    label="Custom field required help"
+                    srLabel={
+                      watch(`customFields.${index}.required`)
+                        ? "Turn off: mark custom field as optional"
+                        : "Turn on: mark custom field as required"
+                    }
                   />
                 </div>
+                <FieldHelp
+                  text="If required, every event must include this field. Keep fields optional unless rules/analytics truly depend on them—required fields can break ingestion if a source forgets to send them."
+                  label="Custom field required help"
+                />
                 <button
                   type="button"
                   onClick={() => removeCustomField(index)}
@@ -1684,7 +1945,7 @@ export function Step4Programme() {
           </div>
           </div>
 
-          <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
+          {/* <div className="rounded-2xl border border-border/70 bg-card/60 p-4 space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Webhook Endpoint
           </h3>
@@ -1702,7 +1963,7 @@ export function Step4Programme() {
               {...register("webhookEndpoint")}
             />
           </FormField>
-          </div>
+          </div> */}
         </div>
 
         {/* Stepper footer */}
@@ -1732,10 +1993,14 @@ export function Step4Programme() {
             </Button>
           ) : (
             <Button
-              type="submit"
+              type="button"
               size="lg"
               disabled={isSubmitting}
               className="bg-brand-600 hover:bg-brand-700 text-white min-w-[180px]"
+              onClick={() => {
+                if (configStep !== 3) return;
+                void handleSubmit(onSubmit, onInvalid)();
+              }}
             >
               {isSubmitting ? "Saving…" : "Save Configuration"}
             </Button>

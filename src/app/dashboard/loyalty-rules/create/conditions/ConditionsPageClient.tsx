@@ -11,11 +11,12 @@ import { FieldHelp } from "@/components/ui/field-help";
 import { ConditionBuilder } from "@/components/loyalty-rules/condition-builder/ConditionBuilder";
 import { fromBackendConditionTree } from "@/components/loyalty-rules/condition-builder/fromBackend";
 import { toBackendConditionTree, type ConditionNode, type ConditionGroup, type ConditionTreeDraft } from "@/components/loyalty-rules/condition-builder/types";
+import { ConditionFieldCatalogProvider } from "@/components/loyalty-rules/condition-field-catalog-context";
+import { useConditionFieldCatalog as useLoadedConditionFieldCatalog } from "@/lib/rules/use-condition-field-catalog";
 import { RuleFlowBuilder, type RuleFlowBuilderHandle } from "@/components/loyalty-rules/condition-flow/RuleFlowBuilder";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
-
-const CONDITIONS_PATH = "/dashboard/loyalty-rules/create/conditions";
+import { stepHref, useRuleCreateFlow } from "../_components/rule-create-flow";
 
 // ── Deep tree validation helpers ─────────────────────────────────────────────
 
@@ -79,6 +80,10 @@ function ModeToggle({
 }
 
 export default function ConditionsPageClient() {
+  const { basePath, draftScope, basicInfoStepSlug } = useRuleCreateFlow();
+  const conditionsPath = stepHref(basePath, "conditions");
+  const actionsPath = stepHref(basePath, "actions");
+  const basicInfoPath = stepHref(basePath, basicInfoStepSlug);
   const router = useRouter();
   const pathname = usePathname();
   const tenantId = useOnboardingStore((s) => s.tenantId) ?? "";
@@ -89,7 +94,10 @@ export default function ConditionsPageClient() {
 
   const [tree, setTree] = useState<ConditionTreeDraft>({ kind: "group", id: "root", op: "AND", nodes: [] });
   const [uiMode, setUiMode] = useState<"current" | "diagram">("current");
-  const [eventType, setEventType] = useState<string>("purchase");
+  const [programmeUid, setProgrammeUid] = useState("default");
+  const [campaignUid, setCampaignUid] = useState("");
+  const [triggerEventType, setTriggerEventType] = useState("PURCHASE");
+  const [eventType, setEventType] = useState<string>("PURCHASE");
   /**
    * False until RuleFlowBuilder confirms the diagram has at least one real
    * condition node with no blocking errors. Initialized to false so the Next
@@ -115,14 +123,17 @@ export default function ConditionsPageClient() {
   // if the effect ordering ever skips a run; pathname + layout timing fixes that.
   useLayoutEffect(() => {
     if (!tenantId || !storeHydrated) return;
-    if (!pathname.includes(CONDITIONS_PATH)) return;
+    if (!pathname.includes(conditionsPath)) return;
 
     setDiagramValid(false);
 
-    const existing = loadRuleDraft(tenantId);
+    const existing = loadRuleDraft(tenantId, draftScope);
     if (!existing) return;
 
-    setEventType(existing.triggerEventType || "purchase");
+    setEventType(existing.triggerEventType || "PURCHASE");
+    setTriggerEventType(existing.triggerEventType || "PURCHASE");
+    setProgrammeUid(existing.programmeUid || "default");
+    setCampaignUid(existing.campaignUid ?? "");
     if (existing.conditionUiMode === "diagram" || existing.conditionUiMode === "current") {
       setUiMode(existing.conditionUiMode);
     }
@@ -135,33 +146,48 @@ export default function ConditionsPageClient() {
     } else {
       setTree(fromBackendConditionTree(existing.conditionTree));
     }
-  }, [tenantId, pathname, storeHydrated]);
+  }, [tenantId, pathname, storeHydrated, conditionsPath, draftScope]);
+
+  const fieldCatalog = useLoadedConditionFieldCatalog({
+    tenantId,
+    programmeUid,
+    triggerEventType,
+    campaignUid: draftScope === "campaign" ? campaignUid : undefined,
+  });
 
   // Autosave so users who jump via the step tabs (without clicking Next) do not lose work.
   useEffect(() => {
     if (!tenantId || !storeHydrated) return;
-    if (!pathname.includes(CONDITIONS_PATH)) return;
+    if (!pathname.includes(conditionsPath)) return;
 
     const t = window.setTimeout(() => {
-      const base = loadRuleDraft(tenantId);
+      const base = loadRuleDraft(tenantId, draftScope);
       if (!base?.name) return;
 
       if (uiMode === "diagram") {
         if (!diagramValid) return;
         const sync = ruleFlowRef.current?.computeCurrentTree();
         if (!sync || sync.hasErrors || !sync.hasConditionNodes || sync.tree.kind === "everyone") return;
-        saveRuleDraftFields(tenantId, {
-          conditionTree: toBackendConditionTree(sync.tree),
-          conditionUiMode: "diagram",
-        });
+        saveRuleDraftFields(
+          tenantId,
+          {
+            conditionTree: toBackendConditionTree(sync.tree),
+            conditionUiMode: "diagram",
+          },
+          draftScope
+        );
         return;
       }
 
       if (!isTreeValid(tree)) return;
-      saveRuleDraftFields(tenantId, {
-        conditionTree: toBackendConditionTree(tree),
-        conditionUiMode: "current",
-      });
+      saveRuleDraftFields(
+        tenantId,
+        {
+          conditionTree: toBackendConditionTree(tree),
+          conditionUiMode: "current",
+        },
+        draftScope
+      );
     }, 450);
     return () => window.clearTimeout(t);
   }, [tree, tenantId, uiMode, diagramValid, pathname, storeHydrated]);
@@ -169,9 +195,9 @@ export default function ConditionsPageClient() {
   const handleUiModeChange = useCallback(
     (m: "current" | "diagram") => {
       setUiMode(m);
-      if (tenantId) saveRuleDraftFields(tenantId, { conditionUiMode: m });
+      if (tenantId) saveRuleDraftFields(tenantId, { conditionUiMode: m }, draftScope);
     },
-    [tenantId]
+    [tenantId, draftScope]
   );
 
   const handleDiagramValidChange = useCallback((valid: boolean) => {
@@ -192,10 +218,10 @@ export default function ConditionsPageClient() {
       toast.error("Missing tenant session. Please re-login.");
       return;
     }
-    const existing = loadRuleDraft(tenantId);
+    const existing = loadRuleDraft(tenantId, draftScope);
     if (!existing || !existing.name) {
       toast.error("Rule draft not found. Start from Basic Info.");
-      router.push("/dashboard/loyalty-rules/create/basic-info");
+      router.push(basicInfoPath);
       return;
     }
 
@@ -222,20 +248,15 @@ export default function ConditionsPageClient() {
         );
         return;
       }
-      // Diagram mode has NO explicit "applies to everyone" UI. If the resulting
-      // tree still collapses to `everyone` despite having condition nodes, the
-      // wiring is broken (e.g. both yes/no branches reach the same award action,
-      // or the predicate is logically tautological). Refuse to save `{}` — the
-      // user must fix the diagram, not silently publish a match-all rule.
       if (sync.tree.kind === "everyone") {
         toast.error(
-          "Your diagram has conditions but every path leads to the same outcome — that is logically the same as 'everyone'. Re-wire one of the branches (e.g. send the 'no' path to 'no action') or switch to Classic and choose 'Applies to everyone'."
+          "The diagram could not be converted to a safe condition tree. Check the validation badge for details."
         );
         return;
       }
       const conditionTree = toBackendConditionTree(sync.tree);
-      saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "diagram" });
-      router.push("/dashboard/loyalty-rules/create/actions");
+      saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "diagram" }, draftScope);
+      router.push(actionsPath);
       return;
     }
 
@@ -245,15 +266,38 @@ export default function ConditionsPageClient() {
       return;
     }
     const conditionTree = toBackendConditionTree(tree);
-    saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "current" });
-    router.push("/dashboard/loyalty-rules/create/actions");
+    saveRuleDraftFields(tenantId, { conditionTree, conditionUiMode: "current" }, draftScope);
+    router.push(actionsPath);
   };
+
+  const conditionsBody = (
+    <>
+      {!fieldCatalog.eventDefinitionMatched && !fieldCatalog.loading ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300 rounded-xl border border-amber-200/80 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20 px-3 py-2">
+          No event definition matched <span className="font-semibold">{triggerEventType}</span> in{" "}
+          {draftScope === "campaign" ? "this campaign's event schema" : "programme config"}.
+          Add it under Setup → Event Schema
+          {draftScope === "campaign" ? " (Campaign schema tab)" : ""}, or pick a trigger that exists.
+        </p>
+      ) : null}
+      {fieldCatalog.eventDefinitionMatched && fieldCatalog.fields.length === 0 && !fieldCatalog.loading ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300 rounded-xl border border-amber-200/80 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20 px-3 py-2">
+          Event <span className="font-semibold">{triggerEventType}</span> has no payload fields defined yet.
+        </p>
+      ) : null}
+      {fieldCatalog.error ? (
+        <p className="text-xs text-red-600">{fieldCatalog.error}</p>
+      ) : null}
+    </>
+  );
 
   // ── Diagram mode — edge-to-edge, no card padding ─────────────────────────
   if (uiMode === "diagram") {
     return (
       <CreateRuleShell title="Conditions">
+        <ConditionFieldCatalogProvider catalog={fieldCatalog}>
         <div className="space-y-4">
+          {conditionsBody}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold">When These Conditions Match</p>
@@ -283,7 +327,7 @@ export default function ConditionsPageClient() {
               type="button"
               variant="outline"
               className="rounded-full"
-              onClick={() => router.push("/dashboard/loyalty-rules/create/basic-info")}
+              onClick={() => router.push(basicInfoPath)}
             >
               ← Back
             </Button>
@@ -292,6 +336,7 @@ export default function ConditionsPageClient() {
             </Button>
           </div>
         </div>
+        </ConditionFieldCatalogProvider>
       </CreateRuleShell>
     );
   }
@@ -299,8 +344,10 @@ export default function ConditionsPageClient() {
   // ── Classic mode — original Card layout, unchanged ────────────────────────
   return (
     <CreateRuleShell title="Conditions">
+      <ConditionFieldCatalogProvider catalog={fieldCatalog}>
       <Card className="p-6 border-border/70 bg-[var(--surface-card)]">
         <div className="space-y-6">
+          {conditionsBody}
           <div>
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold">When These Conditions Match</p>
@@ -327,7 +374,7 @@ export default function ConditionsPageClient() {
               type="button"
               variant="outline"
               className="rounded-full"
-              onClick={() => router.push("/dashboard/loyalty-rules/create/basic-info")}
+              onClick={() => router.push(basicInfoPath)}
             >
               ← Back
             </Button>
@@ -337,6 +384,7 @@ export default function ConditionsPageClient() {
           </div>
         </div>
       </Card>
+      </ConditionFieldCatalogProvider>
     </CreateRuleShell>
   );
 }

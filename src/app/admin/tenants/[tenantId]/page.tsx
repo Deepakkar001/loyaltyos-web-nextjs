@@ -12,6 +12,7 @@ import {
   Shield,
   User,
 } from "lucide-react";
+import { AdminTenantModulesPanel } from "@/components/admin/AdminTenantModulesPanel";
 import { adminApi } from "@/lib/api/admin-client";
 import { AdminTenantDetail, AuditLogItem } from "@/types/onboarding";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,9 @@ export default function TenantDetailPage() {
   const [tenant, setTenant] = useState<AdminTenantDetail | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "agreements" | "contacts" | "activity">("overview");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "agreements" | "contacts" | "activity" | "modules"
+  >("overview");
 
   const fetchData = useCallback(async () => {
     try {
@@ -70,6 +73,7 @@ export default function TenantDetailPage() {
     { id: "agreements" as const, label: `Agreements (${tenant.agreements.length})` },
     { id: "contacts" as const, label: `Contacts (${tenant.contacts.length})` },
     { id: "activity" as const, label: `Activity (${auditLogs.length})` },
+    { id: "modules" as const, label: "Modules" },
   ];
 
   return (
@@ -124,6 +128,12 @@ export default function TenantDetailPage() {
       {activeTab === "agreements" && <AgreementsTab agreements={tenant.agreements} />}
       {activeTab === "contacts" && <ContactsTab contacts={tenant.contacts} />}
       {activeTab === "activity" && <ActivityTab logs={auditLogs} />}
+      {activeTab === "modules" && (
+        <AdminTenantModulesPanel
+          tenantId={tenantId}
+          subscriptionTier={tenant.subscriptionTier}
+        />
+      )}
     </div>
   );
 }

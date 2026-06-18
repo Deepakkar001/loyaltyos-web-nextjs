@@ -51,10 +51,11 @@
     --sidebar-ring: oklch(0.708 0 0);
 
     /* Surface hierarchy — 4 levels of depth */
-    --surface-page: #F8F7F4;
-    --surface-card: #FFFFFF;
+    --surface-page: #fcf9f1;
+    --surface-card: #ffffff;
+    --surface-card-glass: rgba(255, 255, 255, 0.88);
     --surface-raised: #FFFFFF;
-    --surface-sunken: #F1EFF8;
+    --surface-sunken: #E9E8E4;
 
     /* Semantic accent */
     --accent-primary: #5B4FE8;
@@ -80,6 +81,10 @@
     --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
     --shadow-raised: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
     --shadow-hover: 0 8px 24px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.06);
+    --shadow-section:
+      inset 0 1px 0 rgba(255, 255, 255, 0.75),
+      0 4px 20px -2px rgba(0, 0, 0, 0.07),
+      0 12px 36px -6px rgba(0, 0, 0, 0.09);
   }
   .dark {
     --background: oklch(0.145 0 0);
@@ -116,6 +121,7 @@
 
     --surface-page: #0E0F14;
     --surface-card: #161822;
+    --surface-card-glass: rgba(22, 24, 34, 0.78);
     --surface-raised: #1E2030;
     --surface-sunken: #0A0B0F;
 
@@ -139,6 +145,10 @@
     --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
     --shadow-raised: 0 4px 12px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
     --shadow-hover: 0 8px 24px rgba(0,0,0,0.6), 0 4px 8px rgba(0,0,0,0.4);
+    --shadow-section:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 4px 20px -2px rgba(0, 0, 0, 0.42),
+      0 14px 40px -6px rgba(0, 0, 0, 0.52);
   }
   * {
     @apply border-border outline-ring/50;
@@ -197,6 +207,22 @@
   letter-spacing: -0.01em;
 }
 
+/* Dashboard section panels — frosted glass + soft elevation */
+.dashboard-section-card {
+  background: var(--surface-card-glass);
+  box-shadow: var(--shadow-section);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+  backdrop-filter: blur(20px) saturate(1.35);
+}
+
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .dashboard-section-card {
+    background: var(--surface-card);
+  }
+}
+
 /* Metric labels */
 .metric-label {
   font-size: 11px;
@@ -204,4 +230,54 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   opacity: 0.6;
+}
+
+/* Hero — professional motion accents */
+@keyframes hero-text-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+@keyframes hero-border-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.hero-text-shimmer {
+  background-size: 200% auto;
+  animation: hero-text-shimmer 7s ease-in-out infinite;
+}
+
+.hero-shimmer-border {
+  position: relative;
+  border-radius: 1rem;
+  padding: 1px;
+  overflow: hidden;
+}
+
+.hero-shimmer-border::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 260deg,
+    rgba(129, 149, 248, 0.55) 280deg,
+    rgba(200, 214, 254, 0.9) 300deg,
+    rgba(129, 149, 248, 0.55) 320deg,
+    transparent 340deg
+  );
+  animation: hero-border-spin 5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-text-shimmer,
+  .hero-shimmer-border::before {
+    animation: none;
+  }
 }

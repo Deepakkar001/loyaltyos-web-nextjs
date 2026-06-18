@@ -5,50 +5,51 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
-  CalendarRange,
   CircleHelp,
-  Cog,
   DatabaseZap,
   Download,
-  FlaskConical,
+  AlertTriangle,
   GitBranchPlus,
   HandCoins,
   Headset,
+  Scale,
   Layers,
   LayoutGrid,
   Menu,
   Plug,
-  RefreshCw,
   Rocket,
+  Gauge,
+  RotateCcw,
   Search,
   Settings,
   ShieldCheck,
   Star,
+  TicketPercent,
+  Timer,
+  UserPlus,
   User,
   Users,
-  Webhook,
   BookOpenText,
   Megaphone,
   LogOut,
-  LifeBuoy,
   X,
 } from "lucide-react";
+import { Logo } from "@/components/common/logo";
 
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { useUserStore } from "@/lib/store/user-store";
+import { useReferralNavStore } from "@/lib/referrals/referral-nav-store";
 import { ensureAuthSession, onboardingApi } from "@/lib/api/client";
+import { STATUS_TO_STEP, type OnboardingStatus } from "@/types/onboarding";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import toast from "react-hot-toast";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+import { AccessProvider, useAccess } from "@/lib/access/use-access";
+import { resolveNavIcon } from "@/lib/access/icon-map";
+import { AccessRouteGuard } from "@/components/access/route-guard";
+import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
 
 type NavItem = {
   href: string;
@@ -61,20 +62,43 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const NAV_GROUPS: NavGroup[] = [
+/** Canonical integrations page (API keys, sandbox validation). */
+const INTEGRATIONS_HREF = "/dashboard/integration";
+
+function isOnboardingComplete(status: OnboardingStatus | null): boolean {
+  return status != null && STATUS_TO_STEP[status] === "complete";
+}
+
+const LOCKED_NAV_TOOLTIP =
+  "Complete Setup Progress and go live to unlock this section.";
+
+const SETUP_PROGRESS_GROUP: NavGroup = {
+  label: "Setup Progress",
+  items: [
+    { href: "/dashboard/configure", label: "Setup Programme", icon: Settings },
+    { href: "/dashboard/loyalty-rules/create/basic-info", label: "Rules Setup", icon: GitBranchPlus },
+    { href: "/dashboard/loyalty-rules/my-rules", label: "My Rules", icon: Search },
+    { href: INTEGRATIONS_HREF, label: "Integrate", icon: Plug },
+    { href: "/dashboard/go-live", label: "Go Live", icon: Rocket },
+  ],
+};
+
+const MAIN_NAV_GROUPS: NavGroup[] = [
   {
     label: "Dashboard",
     items: [{ href: "/dashboard", label: "Overview", icon: LayoutGrid }],
   },
   {
-    label: "Setup & Config",
+    label: "Configuration",
     items: [
       { href: "/dashboard/configure", label: "Configure Programme", icon: Settings },
       { href: "/dashboard/configure/my-configurations", label: "My Configurations", icon: Search },
       { href: "/dashboard/setup/event-schema", label: "Event Schema", icon: DatabaseZap },
-      { href: "/dashboard/setup/webhooks", label: "Webhook Config", icon: Webhook },
       { href: "/dashboard/setup/rewards-catalog", label: "Rewards Catalog", icon: Star },
-      { href: "/dashboard/setup/tier-management", label: "Tier Management", icon: Layers },
+      { href: "/dashboard/setup/voucher-programs", label: "Voucher Programs", icon: Star },
+      { href: "/dashboard/configure/merchants", label: "Merchants", icon: Users },
+      { href: "/dashboard/coupons", label: "Coupons", icon: TicketPercent },
+      { href: "/dashboard/coupons/analytics", label: "Coupon Analytics", icon: BarChart3 },
     ],
   },
   {
@@ -82,22 +106,53 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/loyalty-rules/create/basic-info", label: "Create Rule", icon: GitBranchPlus },
       { href: "/dashboard/loyalty-rules/my-rules", label: "My Rules", icon: Search },
-      { href: "/dashboard/loyalty-rules/performance", label: "Rule Performance", icon: BarChart3 },
-      { href: "/dashboard/loyalty-rules/simulation", label: "Simulation Tool", icon: FlaskConical },
     ],
   },
   {
     label: "Campaigns",
     items: [
-      { href: "/dashboard/campaigns/active", label: "Active Campaigns", icon: Megaphone },
+      { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/dashboard/campaigns/create", label: "Create Campaign", icon: GitBranchPlus },
+      { href: "/dashboard/campaign-rules/create/campaign?new=1", label: "Create Campaign Rule", icon: GitBranchPlus },
       { href: "/dashboard/campaigns/reports", label: "Campaign Reports", icon: Download },
+    ],
+  },
+  {
+    label: "Referrals",
+    items: [
+      { href: "/dashboard/referrals/my-referrals", label: "My Referrals", icon: Users },
+      { href: "/dashboard/referrals/create", label: "Create Referral", icon: GitBranchPlus },
+      { href: "/dashboard/referrals/analytics", label: "Referral Analytics", icon: BarChart3 },
+      { href: "/dashboard/referrals/fraud-review", label: "Fraud Review", icon: ShieldCheck },
     ],
   },
   {
     label: "Analytics & Reports",
     items: [
       { href: "/dashboard/analytics/custom-reports", label: "Custom Reports", icon: BarChart3 },
+      { href: "/dashboard/analytics/enrollment", label: "Enrollment", icon: UserPlus },
+      { href: "/dashboard/analytics/breakage-expiry", label: "Breakage & Expiry", icon: Timer },
+      {
+        href: "/dashboard/analytics/accrual-redemption-reconciliation",
+        label: "Accrual & Reconciliation",
+        icon: Scale,
+      },
+      { href: "/dashboard/analytics/liability", label: "Liability Report", icon: HandCoins },
+      {
+        href: "/dashboard/analytics/failed-accruals-redemptions",
+        label: "Failed Accruals & Redemptions",
+        icon: AlertTriangle,
+      },
+      {
+        href: "/dashboard/analytics/reversals-adjustments",
+        label: "Reversals & Adjustments",
+        icon: RotateCcw,
+      },
+      {
+        href: "/dashboard/analytics/sla-performance",
+        label: "SLA & Performance",
+        icon: Gauge,
+      },
       { href: "/dashboard/analytics/export-data", label: "Export Data", icon: Download },
       { href: "/dashboard/analytics/segment-analysis", label: "Segment Analysis", icon: Users },
       { href: "/dashboard/analytics/cohort-analysis", label: "Cohort Analysis", icon: Layers },
@@ -107,9 +162,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Settings",
     items: [
       { href: "/dashboard/profile", label: "Your Profile", icon: User },
-      { href: "/dashboard/settings/account", label: "Account Settings", icon: Cog },
       { href: "/dashboard/settings/team", label: "Team & Permissions", icon: Users },
-      { href: "/dashboard/settings/integrations", label: "Integrations", icon: Plug },
+      { href: INTEGRATIONS_HREF, label: "Integrations", icon: Plug },
       { href: "/dashboard/settings/billing", label: "Billing & Plan", icon: HandCoins },
     ],
   },
@@ -121,26 +175,60 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/support/community", label: "Community Forum", icon: CircleHelp },
     ],
   },
-  {
-    label: "Setup Progress",
-    items: [
-      { href: "/dashboard/configure", label: "Configure", icon: Settings },
-      { href: "/dashboard/loyalty-rules/create/basic-info", label: "Rules Setup", icon: GitBranchPlus },
-      { href: "/dashboard/integrate", label: "Integrate", icon: Plug },
-      { href: "/dashboard/go-live", label: "Go Live", icon: Rocket },
-    ],
-  },
 ];
+
+function getSetupRedirectPath(status: OnboardingStatus | null): string {
+  if (status === "AGREEMENT_SIGNED") return "/dashboard/configure";
+  if (status === "CONFIGURED") return "/dashboard/loyalty-rules/create/basic-info";
+  if (status === "RULES_CONFIGURED") return "/dashboard/integration";
+  if (status === "SANDBOX_TESTING") return "/dashboard/go-live";
+  return "/dashboard/configure";
+}
+
+/** Routes reachable while onboarding is incomplete (Setup Progress flow). */
+function isPathAllowedDuringOnboarding(pathname: string): boolean {
+  if (pathname.startsWith("/dashboard/configure")) return true;
+  if (pathname.startsWith("/dashboard/loyalty-rules/create")) return true;
+  if (pathname.startsWith("/dashboard/loyalty-rules/my-rules")) return true;
+  if (pathname.startsWith("/dashboard/integration")) return true;
+  if (pathname === "/dashboard/integrate") return true;
+  if (pathname.startsWith("/dashboard/go-live")) return true;
+  if (pathname === "/dashboard/rules") return true;
+  return false;
+}
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { onboardingStatus } = useOnboardingStore();
+  const { dynamicNavEnabled, loading: accessLoading, navGroups: apiNavGroups } = useAccess();
+  const fraudQueueCount = useReferralNavStore((s) => s.fraudQueueCount);
+  const onboardingComplete = isOnboardingComplete(onboardingStatus);
+
+  const navGroups = useMemo(() => {
+    if (dynamicNavEnabled) {
+      if (accessLoading || apiNavGroups.length === 0) {
+        return onboardingComplete ? [] : [SETUP_PROGRESS_GROUP];
+      }
+      const fromApi: NavGroup[] = apiNavGroups.map((g) => ({
+        label: g.label,
+        items: g.items.map((item) => ({
+          href: item.href.split("?")[0] ?? item.href,
+          label: item.label,
+          icon: resolveNavIcon(item.iconKey),
+        })),
+      }));
+      return onboardingComplete ? fromApi : [SETUP_PROGRESS_GROUP, ...fromApi];
+    }
+    return onboardingComplete
+      ? MAIN_NAV_GROUPS
+      : [SETUP_PROGRESS_GROUP, ...MAIN_NAV_GROUPS];
+  }, [dynamicNavEnabled, accessLoading, apiNavGroups, onboardingComplete]);
 
   // Pick the single best-matching nav href (longest prefix wins) so a parent
   // and a more-specific child don't light up simultaneously.
   const bestHref = useMemo(() => {
     let winner: string | null = null;
-    for (const group of NAV_GROUPS) {
+    for (const group of navGroups) {
       for (const item of group.items) {
         if (pathname === item.href || pathname.startsWith(item.href + "/")) {
           if (!winner || item.href.length > winner.length) winner = item.href;
@@ -148,215 +236,127 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       }
     }
     return winner;
-  }, [pathname]);
+  }, [pathname, navGroups]);
+
+  const navItemClass = (active: boolean, locked: boolean) =>
+    cn(
+      "flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors outline-none",
+      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      locked
+        ? "cursor-not-allowed opacity-40 blur-[0.3px] select-none"
+        : active
+          ? "bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]"
+          : "text-muted-foreground hover:text-foreground hover:bg-gray-50 dark:hover:bg-white/[0.04]"
+    );
 
   return (
-    <nav className="px-3 py-4 space-y-6 overflow-y-auto" aria-label="Tenant sidebar navigation">
-      {NAV_GROUPS.map((group) => (
-        <div key={group.label}>
-          <p className="px-3 pt-6 section-title">
-            {group.label}
-          </p>
-          <div className="mt-2 space-y-1">
-            {group.items.map((item) => {
-              const active = bestHref === item.href;
-              const Icon = item.icon;
-              const showDot =
-                (item.href === "/dashboard/configure" && onboardingStatus === "AGREEMENT_SIGNED") ||
-                (item.href === "/dashboard/loyalty-rules/create/basic-info" && onboardingStatus === "CONFIGURED") ||
-                (item.href === "/dashboard/integrate" && onboardingStatus === "RULES_CONFIGURED") ||
-                (item.href === "/dashboard/go-live" && onboardingStatus === "SANDBOX_TESTING");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors outline-none",
-                    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                    active
-                      ? "bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-gray-50 dark:hover:bg-white/[0.04]"
-                  )}
-                >
-                  <Icon className={cn("h-4 w-4", "text-current")} />
-                  <span className="truncate">{item.label}</span>
-                  {showDot ? (
-                    <span
-                      aria-label="Action required"
-                      className="ml-auto h-2 w-2 rounded-full bg-brand-600"
-                    />
-                  ) : null}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </nav>
+    <TooltipProvider delay={200}>
+      <nav className="px-3 py-4 space-y-6 overflow-y-auto" aria-label="Tenant sidebar navigation">
+        {navGroups.map((group, groupIndex) => {
+          const groupLocked = !onboardingComplete && group.label !== "Setup Progress";
+          return (
+            <div
+              key={group.label}
+              className={cn(groupLocked && "pointer-events-none")}
+              aria-disabled={groupLocked || undefined}
+            >
+              <p className={cn("px-3 section-title", groupIndex === 0 ? "pt-0" : "pt-6")}>
+                {group.label}
+              </p>
+              <div className={cn("mt-2 space-y-1", groupLocked && "pointer-events-auto")}>
+                {group.items.map((item) => {
+                  const active = !groupLocked && bestHref === item.href;
+                  const Icon = item.icon;
+                  const showDot =
+                    !groupLocked &&
+                    ((item.href === "/dashboard/configure" && onboardingStatus === "AGREEMENT_SIGNED") ||
+                      (item.href === "/dashboard/loyalty-rules/create/basic-info" &&
+                        onboardingStatus === "CONFIGURED") ||
+                      (item.href === INTEGRATIONS_HREF && onboardingStatus === "RULES_CONFIGURED") ||
+                      (item.href === "/dashboard/go-live" && onboardingStatus === "SANDBOX_TESTING"));
+                  const showFraudBadge =
+                    !groupLocked &&
+                    item.href === "/dashboard/referrals/fraud-review" &&
+                    fraudQueueCount > 0;
+
+                  const row = (
+                    <>
+                      <Icon className={cn("h-4 w-4 shrink-0", "text-current")} />
+                      <span className="truncate">{item.label}</span>
+                      {showFraudBadge ? (
+                        <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-xs text-destructive-foreground">
+                          {fraudQueueCount}
+                        </span>
+                      ) : null}
+                      {showDot ? (
+                        <span
+                          aria-label="Action required"
+                          className="ml-auto h-2 w-2 rounded-full bg-brand-600"
+                        />
+                      ) : null}
+                    </>
+                  );
+
+                  if (groupLocked) {
+                    return (
+                      <Tooltip key={item.href}>
+                        <TooltipTrigger
+                          type="button"
+                          className={navItemClass(false, true)}
+                          onClick={(e) => e.preventDefault()}
+                        >
+                          {row}
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-[220px] text-center">
+                          {LOCKED_NAV_TOOLTIP}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onNavigate}
+                      className={navItemClass(active, false)}
+                    >
+                      {row}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </nav>
+    </TooltipProvider>
   );
 }
 
-function TopControls() {
-  const [location, setLocation] = useState("all");
-  const [datePreset, setDatePreset] = useState("last-30");
-  const [dateDialogOpen, setDateDialogOpen] = useState(false);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = setInterval(() => setLastUpdated(new Date()), 30000);
-    return () => clearInterval(id);
-  }, [autoRefresh]);
-
-  const nextRefreshSeconds = useMemo(() => {
-    if (!autoRefresh) return null;
-    const diff = 30 - (Math.floor((Date.now() - lastUpdated.getTime()) / 1000) % 30);
-    return diff;
-  }, [autoRefresh, lastUpdated]);
-
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        <Select value={location} onValueChange={(value) => setLocation(value ?? "all")}>
-          <SelectTrigger className="w-[170px] h-9 rounded-full px-4 bg-[var(--surface-sunken)] border-0" aria-label="Filter by location">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Locations</SelectItem>
-            <SelectItem value="north">North Region</SelectItem>
-            <SelectItem value="south">South Region</SelectItem>
-            <SelectItem value="delhi">Delhi Central</SelectItem>
-            <SelectItem value="mumbai">Mumbai Fort</SelectItem>
-            <SelectItem value="bangalore">Bangalore</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 rounded-full px-4 bg-[var(--surface-sunken)] border-0"
-          onClick={() => setDateDialogOpen(true)}
-          aria-label="Open date range picker"
-        >
-          <CalendarRange className="h-4 w-4 mr-2" />
-          {datePreset === "last-7"
-            ? "Last 7 Days"
-            : datePreset === "last-30"
-              ? "Last 30 Days"
-              : datePreset === "last-90"
-                ? "Last 90 Days"
-                : datePreset === "last-12m"
-                  ? "Last 12 Months"
-                  : "Custom Range"}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 w-9 p-0 border-0 bg-transparent text-muted-foreground hover:text-foreground"
-          onClick={() => setLastUpdated(new Date())}
-          aria-label="Refresh dashboard data"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="hidden xl:flex items-center gap-3 text-xs text-muted-foreground">
-        <button
-          type="button"
-          className={cn(
-            "px-2.5 py-1 rounded-full transition-colors",
-            autoRefresh
-              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-medium"
-              : "bg-[var(--surface-sunken)] text-muted-foreground text-xs font-medium"
-          )}
-          onClick={() => setAutoRefresh((v) => !v)}
-          aria-pressed={autoRefresh}
-        >
-          Auto-Refresh: {autoRefresh ? "ON" : "OFF"}
-        </button>
-        <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
-        {autoRefresh && <span>Next update: {nextRefreshSeconds}s</span>}
-      </div>
-
-      <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Select Date Range</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={datePreset === "last-7" ? "default" : "outline"}
-                className={cn(datePreset !== "last-7" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-7")}
-              >
-                Last 7 Days
-              </Button>
-              <Button
-                variant={datePreset === "last-30" ? "default" : "outline"}
-                className={cn(datePreset !== "last-30" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-30")}
-              >
-                Last 30 Days
-              </Button>
-              <Button
-                variant={datePreset === "last-90" ? "default" : "outline"}
-                className={cn(datePreset !== "last-90" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-90")}
-              >
-                Last 90 Days
-              </Button>
-              <Button
-                variant={datePreset === "last-12m" ? "default" : "outline"}
-                className={cn(datePreset !== "last-12m" && "border-0 bg-[var(--surface-sunken)]")}
-                onClick={() => setDatePreset("last-12m")}
-              >
-                Last 12 Months
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label htmlFor="fromDate" className="text-xs text-muted-foreground">From</label>
-                <Input id="fromDate" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="toDate" className="text-xs text-muted-foreground">To</label>
-                <Input id="toDate" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                className="border-0 rounded-full bg-[var(--surface-sunken)] hover:bg-[var(--accent-primary-soft)] hover:text-[var(--accent-primary)]"
-                onClick={() => setDateDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  if (fromDate && toDate) setDatePreset("custom");
-                  setDateDialogOpen(false);
-                }}
-              >
-                Apply
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 
 export default function TenantDashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AccessProvider>
+      <TenantDashboardLayoutInner>{children}</TenantDashboardLayoutInner>
+    </AccessProvider>
+  );
+}
+
+function TenantDashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { accessToken, companyName, email, logout, setRegistrationData } = useOnboardingStore();
+  const {
+    accessToken,
+    companyName,
+    email,
+    logout,
+    setRegistrationData,
+    onboardingStatus,
+    syncStatusFromBackend,
+    mustChangePassword,
+  } = useOnboardingStore();
+  const { fullName: sessionFullName, logout: logoutUserProfile } = useUserStore();
   const [hydrated, setHydrated] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [welcomeName, setWelcomeName] = useState<string | null>(null);
@@ -374,11 +374,14 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
         sessionStorage.setItem("loyaltyos_logout_intent", "1");
       }
       logout();
+      logoutUserProfile();
       router.replace("/login");
     }
   };
 
   const tenantLabel = useMemo(() => {
+    const fromSession = (sessionFullName ?? "").trim();
+    if (fromSession) return fromSession;
     const fromStatus = (welcomeName ?? "").trim();
     if (fromStatus) return fromStatus;
     const fromCompany = (companyName ?? "").trim();
@@ -395,7 +398,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
       }
     }
     return "there";
-  }, [companyName, email, welcomeName]);
+  }, [companyName, email, sessionFullName, welcomeName]);
 
   useEffect(() => {
     const unsub = useOnboardingStore.persist.onFinishHydration(() => setHydrated(true));
@@ -406,14 +409,17 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
   }, []);
 
   useEffect(() => {
-    if (!hydrated || !accessToken) return;
+    if (!hydrated || !accessToken || mustChangePassword) return;
     let alive = true;
     (async () => {
       try {
         const status = await onboardingApi.getMyStatus();
         if (!alive) return;
-        setWelcomeName(status.primaryContactName?.trim() || status.companyName?.trim() || null);
-        setRegistrationData({ companyName: status.companyName, email: status.email });
+        setWelcomeName(status.companyName?.trim() || null);
+        setRegistrationData({ companyName: status.companyName });
+        if (status.onboardingStatus) {
+          syncStatusFromBackend(status.onboardingStatus);
+        }
         const review = status.latestAgreementStatus === "PENDING_APPROVAL";
         setUnderReview(review);
         if (review) {
@@ -432,12 +438,21 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
     return () => {
       alive = false;
     };
-  }, [accessToken, hydrated, setRegistrationData]);
+  }, [accessToken, hydrated, mustChangePassword, setRegistrationData, syncStatusFromBackend]);
+
+  const isLoginLikePath = pathname === "/login" || pathname.startsWith("/onboarding");
+
+  // Block non–Setup Progress routes until tenant is ACTIVE (onboarding complete).
+  useEffect(() => {
+    if (!hydrated || !accessToken || isLoginLikePath) return;
+    if (isOnboardingComplete(onboardingStatus)) return;
+    if (isPathAllowedDuringOnboarding(pathname)) return;
+    router.replace(getSetupRedirectPath(onboardingStatus));
+  }, [hydrated, accessToken, onboardingStatus, pathname, router, isLoginLikePath]);
 
   // After reload the in-memory access token is empty; restore it via refresh cookie.
   // Must run in an effect: updating state during render (the old refreshTried pattern) re-rendered
   // before ensureAuthSession() finished and immediately sent users to /login.
-  const isLoginLikePath = pathname === "/login" || pathname.startsWith("/onboarding");
   useEffect(() => {
     if (!hydrated || isLoginLikePath) return;
     if (typeof window !== "undefined" && sessionStorage.getItem("loyaltyos_logout_intent") === "1") {
@@ -459,8 +474,8 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
     setCheckingReview(true);
     try {
       const status = await onboardingApi.getMyStatus();
-      setWelcomeName(status.primaryContactName?.trim() || status.companyName?.trim() || null);
-      setRegistrationData({ companyName: status.companyName, email: status.email });
+      setWelcomeName(status.companyName?.trim() || null);
+      setRegistrationData({ companyName: status.companyName });
       const review = status.latestAgreementStatus === "PENDING_APPROVAL";
       setUnderReview(review);
       if (!review) {
@@ -479,11 +494,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
   if (isLoginLikePath) return <>{children}</>;
 
   if (!hydrated) {
-    return (
-      <div className="min-h-screen bg-[var(--surface-page)] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return null;
   }
 
   if (!accessToken) {
@@ -492,11 +503,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
       router.replace("/login");
       return null;
     }
-    return (
-      <div className="min-h-screen bg-[var(--surface-page)] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -507,6 +514,15 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
       >
         Skip to main content
       </a>
+
+      {mustChangePassword && (
+        <div className="fixed inset-0 z-[60] pointer-events-none">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
+          <div className="absolute inset-0 flex items-center justify-center p-6 pointer-events-auto">
+            <ChangePasswordDialog />
+          </div>
+        </div>
+      )}
 
       {underReview && (
         <div className="fixed inset-0 z-50 pointer-events-none">
@@ -535,20 +551,10 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
       {/* Desktop sidebar */}
       <aside className={cn(
         "hidden xl:flex fixed inset-y-0 left-0 w-72 bg-[var(--surface-card)] border-r border-gray-100 dark:border-white/[0.06] flex-col",
-        underReview && "blur-sm pointer-events-none select-none"
+        (underReview || mustChangePassword) && "blur-sm pointer-events-none select-none"
       )}>
         <div className="px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/15">
-              <ShieldCheck className="h-5 w-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold tracking-tight truncate">LoyaltyOS</p>
-              <p className="text-[10px] font-medium uppercase tracking-widest truncate text-muted-foreground">
-                {companyName ?? "Tenant"}
-              </p>
-            </div>
-          </div>
+          <Logo />
         </div>
 
         <SidebarNav />
@@ -570,7 +576,12 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
       </aside>
 
       {/* Content column (prevents mobile header becoming a side-column) */}
-      <div className={cn("min-h-screen flex flex-col xl:pl-72", underReview && "blur-sm pointer-events-none select-none")}>
+      <div
+        className={cn(
+          "min-h-screen flex flex-col xl:pl-72",
+          (underReview || mustChangePassword) && "blur-sm pointer-events-none select-none"
+        )}
+      >
         {/* Mobile topbar */}
         <header className="xl:hidden sticky top-0 z-40 bg-[var(--surface-card)] border-b border-gray-100 dark:border-white/[0.06]">
           <div className="h-14 px-4 flex items-center justify-between gap-2">
@@ -587,14 +598,6 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
               <p className="text-[10px] text-muted-foreground truncate">Dashboard Home</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 w-9 p-0 border-0 bg-transparent text-muted-foreground hover:text-foreground"
-                aria-label="Support"
-              >
-                <LifeBuoy className="h-4 w-4" />
-              </Button>
               <ThemeToggle />
             </div>
           </div>
@@ -609,18 +612,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
                 Here’s a quick loyalty health check — and deep dives when needed.
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <TopControls />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 w-9 p-0 border-0 bg-transparent text-muted-foreground hover:text-foreground"
-                aria-label="Open settings"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
           </div>
         </div>
 
@@ -660,7 +652,9 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
           )}
 
           <main id="main" className={cn("xl:pt-16 flex-1 min-w-0", mobileNavOpen && "xl:ml-0")}>
-            {children}
+            <AccessRouteGuard onboardingComplete={isOnboardingComplete(onboardingStatus)}>
+              {children}
+            </AccessRouteGuard>
           </main>
         </div>
       </div>

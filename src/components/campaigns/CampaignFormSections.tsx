@@ -1,0 +1,177 @@
+"use client";
+
+import { useEffect, useMemo, type ReactNode } from "react";
+
+import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
+import { CAMPAIGN_FIELD_PLACEHOLDERS as P } from "@/lib/campaigns/campaign-form";
+import { useProgrammeDropdown } from "@/lib/programme/use-programme-dropdown";
+import { useMerchantProgrammeDropdown } from "@/lib/programme/use-merchant-programme-dropdown";
+import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { Card } from "@/components/ui/card";
+import { FieldHelp } from "@/components/ui/field-help";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+
+function SectionCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="p-6 space-y-5 border-border/70 bg-[var(--surface-card)]">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        {description ? <p className="text-sm text-muted-foreground mt-1">{description}</p> : null}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+export function CampaignBasicInfoSection() {
+  const { mode, form, patch, portal } = useCampaignForm();
+  const tenantId = useOnboardingStore((s) => s.tenantId);
+  const isEdit = mode === "edit";
+  const tenantProgrammes = useProgrammeDropdown(tenantId, form.programmeUid);
+  const merchantProgrammes = useMerchantProgrammeDropdown(form.programmeUid);
+  const { selectOptions, loading: programmesLoading } =
+    portal === "merchant" ? merchantProgrammes : tenantProgrammes;
+
+  useEffect(() => {
+    if (isEdit || programmesLoading || selectOptions.length === 0) return;
+    if (form.programmeUid.trim()) return;
+    if (selectOptions.length === 1) {
+      patch({ programmeUid: selectOptions[0].value });
+    }
+  }, [isEdit, programmesLoading, selectOptions, form.programmeUid, patch]);
+
+  const programmeOptions = useMemo(() => {
+    if (isEdit) return selectOptions;
+    if (form.programmeUid.trim()) return selectOptions;
+    return [
+      {
+        value: "",
+        label: programmesLoading ? "Loading programmes…" : "Select programme…",
+      },
+      ...selectOptions,
+    ];
+  }, [isEdit, selectOptions, form.programmeUid, programmesLoading]);
+
+  return (
+    <SectionCard title="Basic Info">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="campaign-programme">Programme</Label>
+          <FieldHelp text="Campaigns belong to one programme. Pick the same programmeUid your loyalty events send. This cannot be changed after the campaign is created." />
+        </div>
+        <NativeSelect
+          id="campaign-programme"
+          name="programmeUid"
+          ariaLabel="Programme"
+          value={form.programmeUid}
+          disabled={isEdit || programmesLoading}
+          onChange={(next) => patch({ programmeUid: next })}
+          options={programmeOptions}
+        />
+        {isEdit ? (
+          <p className="text-xs text-muted-foreground">
+            Programme is fixed for this campaign.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Programmes are loaded from your tenant configuration.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="campaign-name">Campaign name</Label>
+        <Input
+          id="campaign-name"
+          value={form.name}
+          onChange={(e) => patch({ name: e.target.value })}
+          placeholder={P.name}
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="campaign-description">Description (optional)</Label>
+        <Textarea
+          id="campaign-description"
+          value={form.description}
+          onChange={(e) => patch({ description: e.target.value })}
+          placeholder={P.description}
+          rows={3}
+        />
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="valid-from">Valid from</Label>
+          <Input
+            id="valid-from"
+            type="datetime-local"
+            value={form.validFromLocal}
+            onChange={(e) => patch({ validFromLocal: e.target.value })}
+            placeholder={P.validFrom}
+            required
+          />
+          <p className="text-xs text-muted-foreground">{P.validFromHint}</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="valid-until">Valid until</Label>
+          <Input
+            id="valid-until"
+            type="datetime-local"
+            value={form.validUntilLocal}
+            min={form.validFromLocal || undefined}
+            onChange={(e) => patch({ validUntilLocal: e.target.value })}
+            placeholder={P.validUntil}
+            required
+          />
+          <p className="text-xs text-muted-foreground">{P.validUntilHint}</p>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+export function CampaignBudgetSection() {
+  const { form, patch } = useCampaignForm();
+
+  return (
+    <SectionCard title="Budget">
+      <div className="space-y-2">
+        <Label htmlFor="budget-total">Total budget</Label>
+        <Input
+          id="budget-total"
+          type="number"
+          min={1}
+          value={form.budgetTotal}
+          onChange={(e) => patch({ budgetTotal: e.target.value })}
+          placeholder={P.budgetTotal}
+          required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="alert-threshold">Alert threshold %</Label>
+        <Input
+          id="alert-threshold"
+          type="number"
+          min={1}
+          max={100}
+          value={form.alertThresholdPct}
+          onChange={(e) => patch({ alertThresholdPct: e.target.value })}
+          placeholder={P.alertThresholdPct}
+        />
+      </div>
+    </SectionCard>
+  );
+}

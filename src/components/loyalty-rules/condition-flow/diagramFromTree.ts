@@ -107,28 +107,33 @@ export function diagramFromConditionTree(args: {
       .join("&");
   const ordered = [...dnf].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
 
-  const branchXSpacing = 340;
-  const baseY = 140;
-  const stepY = 150;
-
-  ordered.forEach((conj, i) => {
-    // Remove duplicates in a conjunction deterministically (best-effort)
+  const dedupeConj = (conj: Literal[]) => {
     const seen = new Set<string>();
-    const unique = conj.filter((l) => {
+    return conj.filter((l) => {
       const k = `${l.negated ? "!" : ""}${l.leaf.field}:${l.leaf.op}:${JSON.stringify(l.leaf.value ?? null)}`;
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
     });
+  };
 
-    if (unique.length === 0) {
-      // empty conj => everyone (OR true). Connect directly.
-      edges.push({ id: edgeId(eventId, actionYesId, "yes"), source: eventId, target: actionYesId, data: { label: "yes" } });
-      edges.push({ id: edgeId(eventId, actionNoId, "no"), source: eventId, target: actionNoId, data: { label: "no" } });
-      return;
-    }
+  const uniqueConjs = ordered.map(dedupeConj);
+  /** Non-empty AND-clauses only. Empty disjuncts mean "true" in an OR; they must not add Event→Award edges if we also render real branches — that created a ghost unfiltered path and a validation loop. */
+  const branchConjs = uniqueConjs.filter((u) => u.length > 0);
 
-    const x = (i - Math.floor(ordered.length / 2)) * branchXSpacing;
+  // Nothing but tautological OR branches → same as "everyone" diagram
+  if (branchConjs.length === 0) {
+    edges.push({ id: edgeId(eventId, actionYesId), source: eventId, target: actionYesId, data: {} });
+    edges.push({ id: edgeId(eventId, actionNoId), source: eventId, target: actionNoId, data: {} });
+    return { nodes, edges };
+  }
+
+  const branchXSpacing = 340;
+  const baseY = 140;
+  const stepY = 150;
+
+  branchConjs.forEach((unique, i) => {
+    const x = (i - Math.floor(branchConjs.length / 2)) * branchXSpacing;
 
     unique.forEach((lit, idx) => {
       const id = stableNodeId(["b", i, idx]);
@@ -172,7 +177,6 @@ export function diagramFromConditionTree(args: {
           data: { label: "yes" },
         });
       }
-
     });
 
     // For intermediate nodes, add yes edge to next

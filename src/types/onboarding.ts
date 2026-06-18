@@ -142,11 +142,18 @@ export interface CreateProgrammeRequest {
   name: string;
 }
 
+/** Lifecycle status on {@code programmes.status} (distinct from tenant onboarding ACTIVE). */
+export type ProgrammeOperationalStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+
 export interface ProgrammeSummaryResponse {
   programmeUid: string;
   name: string;
-  status: string;
+  status: ProgrammeOperationalStatus | string;
   activeConfigVersion: number;
+}
+
+export interface ProgrammeStatusPatchRequest {
+  status: "DRAFT" | "ACTIVE";
 }
 
 export interface UpsertProgrammeConfigRequest {
@@ -158,6 +165,25 @@ export interface ProgrammeConfigBlobResponse {
   programmeUid: string;
   configVersion: number;
   config: unknown;
+}
+
+export interface RewardCatalogRecoveryResponse {
+  recoverable: boolean;
+  sourceConfigVersion?: number | null;
+  itemCount: number;
+  voucherItemCount: number;
+  message?: string | null;
+}
+
+export interface PortalRewardCatalogResponse {
+  tenantId: string;
+  programmeUid: string;
+  activeConfigVersion: number;
+  rewardCatalog: unknown;
+  mergedConfigVersions: number[];
+  synthesizedRewardUids: string[];
+  itemCount: number;
+  voucherBatchCount: number;
 }
 
 // ─── API Response Types ───────────────────────────────────────────────────────
@@ -385,8 +411,10 @@ export interface LoginResponse {
   expiresInSeconds: number;
   tenantId: string;
   email: string;
+  fullName: string | null;
   onboardingStatus: OnboardingStatus;
   latestAgreementStatus: AgreementStatus | null;
+  mustChangePassword?: boolean;
 }
 
 export interface OnboardingSelectOption {
@@ -431,7 +459,8 @@ export type WizardStep =
   | "account" // Step 1 — Company + contact details + password
   | "identity" // Step 2 — Identity mode + data residency selection
   | "agreement" // Step 3 — Commercial terms
-  | "programme" // Step 4 — Programme config + tier setup
+  | "modules" // Step 4 — Module entitlements picker
+  | "programme" // Step 5 — Programme config + tier setup
   | "integration" // Step 5 — API keys + webhook setup
   | "complete"; // Step 6 — Go-live summary
 
@@ -468,6 +497,14 @@ export const WIZARD_STEPS: WizardStepMeta[] = [
     isComplete: false,
     isActive: false,
     apiStatus: "AGREEMENT_PENDING",
+  },
+  {
+    id: "modules",
+    label: "Modules",
+    description: "Choose product modules for your tenant",
+    isComplete: false,
+    isActive: false,
+    apiStatus: "AGREEMENT_SIGNED",
   },
 ];
 

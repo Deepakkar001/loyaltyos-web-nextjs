@@ -1,0 +1,196 @@
+.panel {
+  border-radius: 1.25rem;
+  border: 1px solid rgba(245, 158, 11, 0.12);
+  background: linear-gradient(
+    165deg,
+    rgba(245, 158, 11, 0.06) 0%,
+    rgba(15, 23, 42, 0.85) 45%,
+    rgba(15, 23, 42, 0.95) 100%
+  );
+  padding: 1.75rem 1.5rem 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .panel {
+    padding: 2rem 1.75rem 1.75rem;
+  }
+}
+
+.panelTitle {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+  margin: 0 0 0.35rem;
+}
+
+.panelSubtext {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: #94a3b8;
+  margin: 0 0 1.35rem;
+}
+
+.sectionBlock {
+  margin-top: 1.25rem;
+}
+
+.sectionBlock:first-of-type {
+  margin-top: 0;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.sectionLabel {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.sectionBadge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+
+.badgeRequired {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.badgePlan {
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(34, 211, 238, 0.22);
+}
+
+.badgeOptional {
+  color: #a5b4fc;
+  background: rgba(129, 140, 248, 0.1);
+  border-color: rgba(129, 140, 248, 0.22);
+}
+
+.badgeAdmin {
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.28);
+}
+
+.pillGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  align-items: flex-start;
+}
+
+.hintRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding-top: 1.15rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.25);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+
+.warningBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #fde68a;
+}
+
+.summaryStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.875rem;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  background: rgba(15, 23, 42, 0.7);
+}
+
+.summaryCount {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.summaryHint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.saveButton {
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  background: #f59e0b;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.saveButton:hover:not(:disabled) {
+  background: #fbbf24;
+}
+
+.saveButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.resetButton {
+  padding: 0.5rem 1rem;
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid rgba(71, 85, 105, 0.8);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.resetButton:hover:not(:disabled) {
+  color: #e2e8f0;
+  border-color: #64748b;
+}
+
+.resetButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

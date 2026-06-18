@@ -31,8 +31,17 @@ describe("RuleTreeBuilder", () => {
     ];
     const { tree, errors } = new RuleTreeBuilder().buildTree(nodes, edges);
     expect(errors.filter((e) => e.severity === "error")).toHaveLength(0);
-    // Since BOTH yes and no end in actions, the overall condition is always true.
-    expect(tree.kind).toBe("everyone");
+    // Only non-noop actions qualify the rule; "no" → noop is ignored for the saved tree.
+    expect(tree.kind).toBe("group");
+    if (tree.kind === "group") {
+      const leaf = tree.nodes[0];
+      expect(leaf?.kind).toBe("leaf");
+      if (leaf?.kind === "leaf") {
+        expect(leaf.field).toBe("event.amount");
+        expect(leaf.op).toBe("GT");
+        expect(leaf.value).toBe(500);
+      }
+    }
   });
 
   it("is deterministic regardless of edge array order", () => {

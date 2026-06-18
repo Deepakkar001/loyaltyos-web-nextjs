@@ -14,15 +14,8 @@ export type ComparisonOp =
   | "CONTAINS"
   | "STARTS_WITH";
 
-export type ConditionField =
-  | "event.amount"
-  | "event.eventType"
-  | "event.channel"
-  | "event.timestamp"
-  | "event.transactionId"
-  | "event.merchantId"
-  | "event.productCategory"
-  | "customer.tierUid";
+/** Field path sent to the backend condition tree (e.g. event.amount, customer.tierUid). */
+export type ConditionField = string;
 
 export type LeafCondition = {
   id: string;

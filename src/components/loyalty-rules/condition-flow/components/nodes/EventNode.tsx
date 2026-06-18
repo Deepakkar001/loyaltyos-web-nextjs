@@ -7,10 +7,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { buttonVariants } from "@/components/ui/button";
 
 import type { EventNodeData } from "../../types";
-import { FIELD_METADATA } from "../../types";
+import { useConditionFieldCatalog } from "@/components/loyalty-rules/condition-field-catalog-context";
 import { useNodeErrorLevel } from "../../errorsContext";
 import { cn } from "@/lib/utils";
 import { useConditionFlowActions } from "../../actionsContext";
+import { useConditionFlowReadOnly } from "../../viewModeContext";
 
 const EVENT_OPTIONS = [
   { label: "Purchase", value: "purchase" },
@@ -19,11 +20,13 @@ const EVENT_OPTIONS = [
 ] as const;
 
 export function EventNode({ id, data, selected }: NodeProps<EventNodeData>) {
+  const catalog = useConditionFieldCatalog();
+  const readOnly = useConditionFlowReadOnly();
   const level = useNodeErrorLevel(id);
   const actions = useConditionFlowActions();
   const [open, setOpen] = useState(false);
   const current = data.eventType || "purchase";
-  const fields = useMemo(() => Object.values(FIELD_METADATA), []);
+  const fields = useMemo(() => catalog.fields.map((f) => ({ label: f.label, type: f.type })), [catalog.fields]);
 
   return (
     <div
@@ -38,6 +41,7 @@ export function EventNode({ id, data, selected }: NodeProps<EventNodeData>) {
       <p className="mt-1 text-sm font-semibold text-foreground">{data.eventType ? data.eventType.toUpperCase() : "Select event"}</p>
       <p className="mt-2 text-xs text-muted-foreground">Start of the rule evaluation.</p>
 
+      {readOnly ? null : (
       <div className="mt-3">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger>
@@ -87,6 +91,7 @@ export function EventNode({ id, data, selected }: NodeProps<EventNodeData>) {
           </DialogContent>
         </Dialog>
       </div>
+      )}
 
       <Handle type="source" position={Position.Bottom} className="!bg-emerald-500 !border-emerald-600" />
     </div>

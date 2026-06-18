@@ -9,23 +9,27 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { integrationApi, loyaltyRulesAdminApi } from "@/lib/api/client";
+import { campaignsAdminApi, integrationApi, loyaltyRulesAdminApi } from "@/lib/api/client";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { markSandboxPassed } from "@/lib/store/rule-sandbox-gate";
+import {
+  buildLegacySandboxPayload,
+  buildSandboxPayloadFromFields,
+  defaultSandboxInputForField,
+  resolveSandboxFormFields,
+  type SandboxFormField,
+} from "@/lib/rules/rule-simulate-schema";
+import { useRuleSimulateEventSchema } from "@/lib/rules/use-rule-simulate-event-schema";
 
-/** Must match `FIELD_METADATA["event.channel"].options` — sandbox `#event['channel']` is compared case-sensitively. */
+/** Legacy fallback — sandbox `#event['channel']` is compared case-sensitively. */
 const CHANNEL_OPTIONS = [
   { value: "mobile", label: "mobile" },
   { value: "web", label: "web" },
   { value: "instore", label: "instore" },
 ] as const;
 
-/**
- * Condition builder / diagram leaf values use lowercase event types (purchase, login, referral).
- * Basic Info / integrations may use uppercase. Sandbox payload must match your `event.eventType`
- * condition **exactly** (case-sensitive).
- */
 const EVENT_TYPE_SUGGESTIONS = ["purchase", "login", "referral", "PURCHASE", "LOGIN", "REFERRAL"] as const;
 
 type RuleEval = {
@@ -42,6 +46,16 @@ type RuleEval = {
   matchedRules?: Array<{ ruleUid?: string; ruleName?: string; pointsFromThisRule?: number }>;
   suppressedRules?: Array<{ ruleUid?: string; reason?: string }>;
   rewardCommands?: Array<{ actionType?: string; pointsToAward?: number; sourceRuleUid?: string; idempotencyKey?: string }>;
+  catalogGrants?: Array<{
+    sourceRuleUid?: string;
+    ruleName?: string;
+    catalogRewardUid?: string;
+    catalogRewardName?: string;
+    catalogRewardType?: string;
+    catalogPointsCost?: number;
+    valid?: boolean;
+    errorMessage?: string;
+  }>;
   evaluationTrace?: unknown;
 };
 
@@ -50,9 +64,46 @@ type SandboxValidateResponse = {
   tenantId?: string;
   payload?: unknown;
   schemaPresent?: boolean;
+  schemaSource?: string;
+  sandboxPassed?: boolean;
+  targetedCustomerOk?: boolean;
+  targetedErrorCode?: string;
+  targetedErrorMessage?: string;
+  ruleEvaluationSkipped?: boolean;
+  ruleEvaluationSkippedReason?: string;
   ruleEvaluation?: RuleEval;
   ruleEvaluationError?: string;
 };
+
+/** When a campaign rule targets a list, non-members must not show rule matches or points. */
+function effectiveRuleEvaluation(res: SandboxValidateResponse): RuleEval | null {
+  if (res.targetedCustomerOk === false) {
+    return {
+      message: "No match",
+      finalPointsAwarded: 0,
+      matchedRules: [],
+      suppressedRules: [],
+      rewardCommands: [],
+      catalogGrants: [],
+    };
+  }
+  return res.ruleEvaluation ?? null;
+}
+
+function fieldsIdentity(fields: SandboxFormField[]): string {
+  return fields.map((f) => `${f.name}:${f.source}:${f.widget}`).join("|");
+}
+
+function readTransactionIdFromPayloadJson(payloadJson: string, fallback: string): string {
+  try {
+    const parsed = JSON.parse(payloadJson) as Record<string, unknown>;
+    const t = parsed.transactionId ?? parsed.transaction_id;
+    if (typeof t === "string" && t.trim()) return t;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
 
 export default function RuleSimulatePage() {
   const params = useParams<{ ruleUid: string }>();
@@ -61,26 +112,59 @@ export default function RuleSimulatePage() {
   const ruleUid = params.ruleUid;
   const tenantId = useOnboardingStore((s) => s.tenantId) ?? "";
 
+  const [campaignUid, setCampaignUid] = useState<string | undefined>(undefined);
+  const [targetedSampleCustomers, setTargetedSampleCustomers] = useState<string[]>([]);
+
   const [customerId, setCustomerId] = useState("cust_123");
   const [amount, setAmount] = useState("500");
-  /** Default aligns with condition-builder literals; may be overwritten from saved rule below. */
   const [eventType, setEventType] = useState("purchase");
   const [transactionId, setTransactionId] = useState(`txn_${Date.now()}`);
   const [channel, setChannel] = useState("mobile");
   const [payloadOverride, setPayloadOverride] = useState("");
 
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+
   const [result, setResult] = useState<SandboxValidateResponse | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const {
+    loading: schemaLoading,
+    error: schemaError,
+    draft,
+    programmeConfigRoot,
+    suggestedEventTypes,
+  } = useRuleSimulateEventSchema({ programmeUid, campaignUid });
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const rule = await loyaltyRulesAdminApi.getRule(ruleUid, programmeUid);
-        if (cancelled || !rule?.triggerEventType) return;
-        setEventType(rule.triggerEventType);
+        if (cancelled || !rule) return;
+        if (rule.triggerEventType) {
+          setEventType(rule.triggerEventType);
+        }
+        const uid = rule.campaignUid?.trim() || undefined;
+        setCampaignUid(uid);
+        if (uid && rule.ruleType === "CAMPAIGN") {
+          try {
+            const campaign = await campaignsAdminApi.getCampaign(uid);
+            if (!cancelled && campaign.customerScope === "TARGETED") {
+              const page = await campaignsAdminApi.listTargetCustomers(uid, { size: 20 });
+              if (!cancelled) {
+                setTargetedSampleCustomers(
+                  page.content.map((r) => r.customerId).filter((id): id is string => Boolean(id))
+                );
+              }
+            } else if (!cancelled) {
+              setTargetedSampleCustomers([]);
+            }
+          } catch {
+            if (!cancelled) setTargetedSampleCustomers([]);
+          }
+        }
       } catch {
-        // non-blocking: keep defaults
+        /* non-blocking */
       }
     })();
     return () => {
@@ -88,19 +172,79 @@ export default function RuleSimulatePage() {
     };
   }, [ruleUid, programmeUid]);
 
-  const payloadJson = useMemo(() => {
-    if (payloadOverride.trim()) return payloadOverride.trim();
-    const payload = {
+  const { eventDefinitionMatched, fields } = useMemo(() => {
+    if (!draft) {
+      return { eventDefinitionMatched: false, fields: [] as SandboxFormField[] };
+    }
+    return resolveSandboxFormFields({
+      draft,
+      eventType,
+      programmeConfigRoot: programmeConfigRoot ?? null,
+    });
+  }, [draft, eventType, programmeConfigRoot]);
+
+  const useDynamicForm = Boolean(draft && fields.length > 0);
+
+  const fieldsKey = fieldsIdentity(fields);
+  useEffect(() => {
+    if (!useDynamicForm) {
+      setFieldValues({});
+      return;
+    }
+    const next: Record<string, string> = {};
+    for (const f of fields) {
+      next[f.name] = defaultSandboxInputForField(f);
+    }
+    setFieldValues(next);
+  }, [eventType, fieldsKey, useDynamicForm]);
+
+  const payloadObject = useMemo(() => {
+    if (useDynamicForm) {
+      return buildSandboxPayloadFromFields({
+        programmeUid,
+        eventType,
+        fields,
+        fieldValues,
+      });
+    }
+    return buildLegacySandboxPayload({
       programmeUid,
       eventType,
-      timestamp: new Date().toISOString(),
       transactionId,
       customerId,
-      amount: Number(amount),
+      amount,
       channel,
+    });
+  }, [
+    useDynamicForm,
+    programmeUid,
+    eventType,
+    fields,
+    fieldValues,
+    transactionId,
+    customerId,
+    amount,
+    channel,
+  ]);
+
+  const payloadJson = useMemo(() => {
+    if (payloadOverride.trim()) return payloadOverride.trim();
+    return JSON.stringify(payloadObject, null, 2);
+  }, [payloadOverride, payloadObject]);
+
+  const eventTypeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const push = (t: string) => {
+      const s = t.trim();
+      if (!s || seen.has(s)) return;
+      seen.add(s);
+      out.push(s);
     };
-    return JSON.stringify(payload, null, 2);
-  }, [payloadOverride, programmeUid, eventType, transactionId, customerId, amount, channel]);
+    for (const t of suggestedEventTypes) push(t);
+    for (const t of EVENT_TYPE_SUGGESTIONS) push(t);
+    return out;
+  }, [suggestedEventTypes]);
 
   const runTest = async () => {
     setLoading(true);
@@ -108,27 +252,38 @@ export default function RuleSimulatePage() {
       const res = (await integrationApi.validateSandboxEvent(payloadJson, ruleUid)) as SandboxValidateResponse;
       setResult(res);
 
-      // Best-effort: determine if this specific rule matched by checking ruleEvaluation.matchedRules.
-      const ruleEval = res.ruleEvaluation;
+      const ruleEval = effectiveRuleEvaluation(res);
       const matchedRules = Array.isArray(ruleEval?.matchedRules) ? ruleEval.matchedRules : [];
-      const didMatch = matchedRules.some((m) => String(m?.ruleUid ?? "") === ruleUid);
+      const didMatch =
+        res.sandboxPassed === true ||
+        (res.sandboxPassed === undefined &&
+          matchedRules.some((m) => String(m?.ruleUid ?? "") === ruleUid) &&
+          res.targetedCustomerOk !== false);
       const finalPoints = typeof ruleEval?.finalPointsAwarded === "number" ? ruleEval.finalPointsAwarded : undefined;
+
+      const gateTxnId = readTransactionIdFromPayloadJson(
+        payloadJson,
+        useDynamicForm ? (fieldValues.transactionId ?? "") : transactionId
+      );
 
       if (tenantId && didMatch) {
         markSandboxPassed(tenantId, programmeUid, ruleUid, {
           passed: true,
           passedAt: new Date().toISOString(),
-          lastTxnId: transactionId,
+          lastTxnId: gateTxnId,
           lastPoints: finalPoints,
         });
         toast.success("Sandbox test passed for this rule. Activation is now enabled.");
       } else if (didMatch && !tenantId) {
         toast("Rule matched. Sign in to record the sandbox pass for activation.");
       } else if (!didMatch) {
-        toast(
-          "No match for this rule. Set event type / amount / channel to the same values your conditions use (case-sensitive).",
-          { duration: 5000 }
-        );
+        const hint =
+          res.targetedErrorMessage ??
+          res.ruleEvaluationError ??
+          (ruleEval?.message === "No match"
+            ? "Rule evaluated but conditions did not match. Use the exact field names and values from your rule (e.g. event.Channel vs event.channel — case-sensitive)."
+            : "No match for this rule. Fill CustomerId / Channel / event type to match your conditions (case-sensitive), then check Test Results → Raw response.");
+        toast(hint, { duration: 6000 });
       } else {
         toast("Sandbox test completed.");
       }
@@ -137,6 +292,10 @@ export default function RuleSimulatePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const setField = (name: string, value: string) => {
+    setFieldValues((prev) => ({ ...prev, [name]: value }));
   };
 
   return (
@@ -149,13 +308,22 @@ export default function RuleSimulatePage() {
           </p>
           <p className="text-sm text-muted-foreground mt-2 max-w-xl">
             Conditions compare <b>case-sensitively</b> with this payload (e.g. <code className="text-xs">event.eventType</code> must
-            equal the <b>Event type</b> string below — use <code className="text-xs">purchase</code> if your condition uses that, or{" "}
-            <code className="text-xs">PURCHASE</code> if that is what you saved on Basic Info). Channel must match condition literals (
-            <code className="text-xs">mobile</code>, not <code className="text-xs">MOBILE_APP</code>).
+            equal the <b>Event type</b> string below). When an event schema exists, fields match your programme or campaign definition;{" "}
+            otherwise the simple field set is used.
           </p>
+          {campaignUid ? (
+            <p className="text-xs text-muted-foreground mt-2">
+              Campaign rule — event schema loads from the campaign, falling back to the programme template when the campaign has no
+              schema.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground mt-2">Programme rule — event schema comes from programme configuration.</p>
+          )}
         </div>
         <Link href={`/dashboard/loyalty-rules/my-rules/${encodeURIComponent(ruleUid)}/details?programmeUid=${encodeURIComponent(programmeUid)}`}>
-          <Button variant="outline" className="rounded-full">Back to Details</Button>
+          <Button variant="outline" className="rounded-full">
+            Back to Details
+          </Button>
         </Link>
       </div>
 
@@ -163,57 +331,185 @@ export default function RuleSimulatePage() {
         <Card className="p-6 border-border/70 bg-[var(--surface-card)] space-y-4">
           <p className="text-sm font-semibold">Create Test Event</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground" htmlFor="eventType">
-                Event type (must match condition literals)
-              </Label>
-              <Input
-                id="eventType"
-                list="sandbox-event-type-suggestions"
-                value={eventType}
-                onChange={(e) => setEventType(e.target.value)}
-                placeholder="purchase or PURCHASE"
-                autoComplete="off"
-              />
-              <datalist id="sandbox-event-type-suggestions">
-                {EVENT_TYPE_SUGGESTIONS.map((v) => (
-                  <option key={v} value={v} />
-                ))}
-              </datalist>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground" htmlFor="customerId">Customer ID</Label>
-              <Input id="customerId" value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground" htmlFor="amount">Amount</Label>
-              <Input id="amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground" htmlFor="channel">
-                Channel (must match <code className="text-[10px]">event.channel</code> in conditions)
-              </Label>
-              <Input
-                id="channel"
-                list="sandbox-channel-suggestions"
-                value={channel}
-                onChange={(e) => setChannel(e.target.value)}
-                placeholder="mobile"
-                autoComplete="off"
-              />
-              <datalist id="sandbox-channel-suggestions">
-                {CHANNEL_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value} />
-                ))}
-                <option value="MOBILE_APP" />
-              </datalist>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label className="text-xs text-muted-foreground" htmlFor="transactionId">Transaction ID</Label>
-              <Input id="transactionId" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} />
-            </div>
+          {schemaError ? (
+            <p className="text-xs text-amber-800 dark:text-amber-200 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2">
+              {schemaError} — using basic fields below.
+            </p>
+          ) : null}
+
+          {schemaLoading ? <p className="text-xs text-muted-foreground">Loading event schema…</p> : null}
+
+          {!schemaLoading && useDynamicForm && !eventDefinitionMatched && fields.length > 0 ? (
+            <p className="text-xs text-muted-foreground rounded-lg border border-border bg-[var(--surface-sunken)] px-3 py-2">
+              This event type is not listed in the schema’s event definitions; only custom fields appear. Choose a defined event type
+              for the full core field set, or use the JSON override.
+            </p>
+          ) : null}
+
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground" htmlFor="eventType">
+              Event type (must match condition literals)
+            </Label>
+            <Input
+              id="eventType"
+              list="sandbox-event-type-suggestions"
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+              placeholder="purchase or PURCHASE"
+              autoComplete="off"
+            />
+            <datalist id="sandbox-event-type-suggestions">
+              {eventTypeOptions.map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
           </div>
+
+          {useDynamicForm ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {fields.map((f) => (
+                <div key={`${f.source}-${f.name}`} className={`space-y-2 ${f.widget === "object" ? "sm:col-span-2" : ""}`}>
+                  <Label className="text-xs text-muted-foreground" htmlFor={`sf-${f.name}`}>
+                    {f.name}
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      ({f.type}
+                      {f.required ? ", required" : ""})
+                    </span>
+                  </Label>
+                  {f.widget === "boolean" ? (
+                    <NativeSelect
+                      id={`sf-${f.name}`}
+                      ariaLabel={`${f.name} boolean`}
+                      value={fieldValues[f.name] ?? "false"}
+                      onChange={(v) => setField(f.name, v)}
+                      options={[
+                        { value: "false", label: "false" },
+                        { value: "true", label: "true" },
+                      ]}
+                    />
+                  ) : f.widget === "channel" ? (
+                    f.channelOptions?.length ? (
+                      <NativeSelect
+                        id={`sf-${f.name}`}
+                        ariaLabel={`${f.name} channel`}
+                        value={fieldValues[f.name] ?? ""}
+                        onChange={(v) => setField(f.name, v)}
+                        options={f.channelOptions.map((v) => ({ value: v, label: v }))}
+                      />
+                    ) : (
+                      <Input
+                        id={`sf-${f.name}`}
+                        value={fieldValues[f.name] ?? ""}
+                        onChange={(e) => setField(f.name, e.target.value)}
+                        placeholder="channel"
+                        autoComplete="off"
+                      />
+                    )
+                  ) : f.widget === "integer" ? (
+                    <Input
+                      id={`sf-${f.name}`}
+                      type="number"
+                      step={1}
+                      value={fieldValues[f.name] ?? ""}
+                      onChange={(e) => setField(f.name, e.target.value)}
+                    />
+                  ) : f.widget === "number" ? (
+                    <Input
+                      id={`sf-${f.name}`}
+                      type="number"
+                      step="any"
+                      value={fieldValues[f.name] ?? ""}
+                      onChange={(e) => setField(f.name, e.target.value)}
+                    />
+                  ) : f.widget === "datetime" ? (
+                    <Input
+                      id={`sf-${f.name}`}
+                      type="datetime-local"
+                      value={fieldValues[f.name] ?? ""}
+                      onChange={(e) => setField(f.name, e.target.value)}
+                    />
+                  ) : f.widget === "object" ? (
+                    <Textarea
+                      id={`sf-${f.name}`}
+                      value={fieldValues[f.name] ?? "{}"}
+                      onChange={(e) => setField(f.name, e.target.value)}
+                      rows={4}
+                      className="font-mono text-xs"
+                    />
+                  ) : (
+                    <Input
+                      id={`sf-${f.name}`}
+                      value={fieldValues[f.name] ?? ""}
+                      onChange={(e) => setField(f.name, e.target.value)}
+                      autoComplete="off"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              {targetedSampleCustomers.length > 0 ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-2">
+                  <p className="text-sm font-medium">Targeted campaign audience</p>
+                  <p className="text-xs text-muted-foreground">
+                    Sandbox requires a customer from the uploaded list. Pick a sample ID (read-only helper):
+                  </p>
+                  <NativeSelect
+                    ariaLabel="Sample targeted customer"
+                    value={customerId}
+                    onChange={setCustomerId}
+                    options={[
+                      { value: customerId, label: customerId || "Select customer…" },
+                      ...targetedSampleCustomers
+                        .filter((id) => id !== customerId)
+                        .map((id) => ({ value: id, label: id })),
+                    ]}
+                  />
+                </div>
+              ) : null}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground" htmlFor="customerId">
+                  Customer ID
+                </Label>
+                <Input id="customerId" value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground" htmlFor="amount">
+                  Amount
+                </Label>
+                <Input id="amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground" htmlFor="channel">
+                  Channel (must match <code className="text-[10px]">event.channel</code> in conditions)
+                </Label>
+                <Input
+                  id="channel"
+                  list="sandbox-channel-suggestions"
+                  value={channel}
+                  onChange={(e) => setChannel(e.target.value)}
+                  placeholder="mobile"
+                  autoComplete="off"
+                />
+                <datalist id="sandbox-channel-suggestions">
+                  {CHANNEL_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value} />
+                  ))}
+                  <option value="MOBILE_APP" />
+                </datalist>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label className="text-xs text-muted-foreground" htmlFor="transactionId">
+                  Transaction ID
+                </Label>
+                <Input id="transactionId" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} />
+              </div>
+            </div>
+            </>
+          )}
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground" htmlFor="payloadOverride">
@@ -249,36 +545,50 @@ export default function RuleSimulatePage() {
             <p className="text-sm text-muted-foreground">Run a test to see evaluation output.</p>
           ) : (
             <div className="space-y-3">
+              {result.targetedCustomerOk === false && result.targetedErrorMessage ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                  {result.targetedErrorMessage}
+                </div>
+              ) : null}
+
               {result.ruleEvaluationError ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
                   {result.ruleEvaluationError}
                 </div>
               ) : null}
 
-              {result.ruleEvaluation ? (
+              {effectiveRuleEvaluation(result) ? (
                 <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                   <p className="text-sm font-semibold">Outcome</p>
-                  {result.ruleEvaluation.message ? (
+                  {(() => {
+                    const ruleEval = effectiveRuleEvaluation(result)!;
+                    return (
+                      <>
+                  {ruleEval.message ? (
                     <p className="text-sm text-foreground rounded-lg border border-border bg-[var(--surface-sunken)] px-3 py-2">
-                      {result.ruleEvaluation.message}
+                      {ruleEval.message}
                     </p>
                   ) : null}
                   <div className="text-sm text-muted-foreground">
                     <div>
                       Final points:{" "}
+                      <span className="text-foreground font-semibold">{ruleEval.finalPointsAwarded ?? 0}</span>
+                    </div>
+                    <div>Matched rules: {ruleEval.matchedRules?.length ?? 0}</div>
+                    <div>Suppressed rules: {ruleEval.suppressedRules?.length ?? 0}</div>
+                    <div>
+                      Catalog grants:{" "}
                       <span className="text-foreground font-semibold">
-                        {result.ruleEvaluation.finalPointsAwarded ?? "-"}
+                        {ruleEval.catalogGrants?.length ?? 0}
                       </span>
                     </div>
-                    <div>Matched rules: {result.ruleEvaluation.matchedRules?.length ?? 0}</div>
-                    <div>Suppressed rules: {result.ruleEvaluation.suppressedRules?.length ?? 0}</div>
                   </div>
 
                   <div className="pt-2">
                     <p className="text-sm font-semibold">Matched rules</p>
-                    {result.ruleEvaluation.matchedRules?.length ? (
+                    {ruleEval.matchedRules?.length ? (
                       <div className="mt-2 space-y-2">
-                        {result.ruleEvaluation.matchedRules.map((m, idx) => (
+                        {ruleEval.matchedRules.map((m, idx) => (
                           <div key={idx} className="rounded-xl border border-border bg-[var(--surface-sunken)] p-3 text-sm">
                             <div className="font-medium">{m.ruleName ?? m.ruleUid}</div>
                             <div className="text-xs text-muted-foreground mt-1">
@@ -293,10 +603,51 @@ export default function RuleSimulatePage() {
                   </div>
 
                   <div className="pt-2">
-                    <p className="text-sm font-semibold">Reward commands</p>
-                    {result.ruleEvaluation.rewardCommands?.length ? (
+                    <p className="text-sm font-semibold">Catalog grants (vouchers)</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Issued when the rule matches — not a points ledger debit.{" "}
+                      <span className="font-medium">Redemption cost</span> is what the member spends later to redeem.
+                    </p>
+                    {ruleEval.catalogGrants?.length ? (
                       <div className="mt-2 space-y-2">
-                        {result.ruleEvaluation.rewardCommands.map((c, idx) => (
+                        {ruleEval.catalogGrants.map((g, idx) => (
+                          <div
+                            key={idx}
+                            className={`rounded-xl border p-3 text-sm ${
+                              g.valid === false
+                                ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40"
+                                : "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30"
+                            }`}
+                          >
+                            <div className="font-medium">
+                              {g.catalogRewardName ?? g.catalogRewardUid ?? "Catalog reward"}
+                              {g.valid === false ? " (invalid)" : ""}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                              <div>
+                                rewardUid: {g.catalogRewardUid ?? "-"} · type: {g.catalogRewardType ?? "-"}
+                              </div>
+                              {g.catalogPointsCost != null ? (
+                                <div>Redemption cost: {g.catalogPointsCost} points</div>
+                              ) : null}
+                              <div>
+                                from rule: {g.ruleName ?? g.sourceRuleUid ?? "-"}
+                              </div>
+                              {g.errorMessage ? <div className="text-red-700 dark:text-red-300">{g.errorMessage}</div> : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-1">No catalog grants for matched rules.</p>
+                    )}
+                  </div>
+
+                  <div className="pt-2">
+                    <p className="text-sm font-semibold">Reward commands (points)</p>
+                    {ruleEval.rewardCommands?.length ? (
+                      <div className="mt-2 space-y-2">
+                        {ruleEval.rewardCommands.map((c, idx) => (
                           <div key={idx} className="rounded-xl border border-border bg-[var(--surface-sunken)] p-3 text-sm">
                             <div className="font-medium">{c.actionType ?? "ACTION"}</div>
                             <div className="text-xs text-muted-foreground mt-1">
@@ -313,9 +664,12 @@ export default function RuleSimulatePage() {
                   <details className="pt-2">
                     <summary className="text-sm font-semibold cursor-pointer">Raw trace</summary>
                     <pre className="mt-2 text-xs overflow-auto rounded-xl border border-border bg-[var(--surface-sunken)] p-3">
-                      {JSON.stringify(result.ruleEvaluation.evaluationTrace ?? {}, null, 2)}
+                      {JSON.stringify(ruleEval.evaluationTrace ?? result.ruleEvaluation?.evaluationTrace ?? {}, null, 2)}
                     </pre>
                   </details>
+                      </>
+                    );
+                  })()}
                 </div>
               ) : null}
 
@@ -332,4 +686,3 @@ export default function RuleSimulatePage() {
     </div>
   );
 }
-
