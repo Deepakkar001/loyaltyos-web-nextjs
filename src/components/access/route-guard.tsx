@@ -14,12 +14,13 @@ export function AccessRouteGuard({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { permissionsEnforced, dynamicNavEnabled, loading, canAccessPath } = useAccess();
+  const { permissionsEnforced, dynamicNavEnabled, loading, access, canAccessPath } = useAccess();
 
   const enforcementActive = permissionsEnforced || dynamicNavEnabled;
+  const accessResolved = !loading && access != null;
 
   const allowed = useMemo(() => {
-    if (!onboardingComplete || !enforcementActive || loading) return true;
+    if (!onboardingComplete || !enforcementActive || !accessResolved) return true;
     if (searchParams.get("denied") === "module" || searchParams.get("denied") === "permission") {
       return true;
     }
@@ -27,14 +28,14 @@ export function AccessRouteGuard({
   }, [
     onboardingComplete,
     enforcementActive,
-    loading,
+    accessResolved,
     canAccessPath,
     pathname,
     searchParams,
   ]);
 
   useEffect(() => {
-    if (!onboardingComplete || !enforcementActive || loading) return;
+    if (!onboardingComplete || !enforcementActive || !accessResolved) return;
     if (searchParams.get("denied") === "module" || searchParams.get("denied") === "permission") {
       return;
     }
@@ -45,7 +46,7 @@ export function AccessRouteGuard({
     pathname,
     onboardingComplete,
     enforcementActive,
-    loading,
+    accessResolved,
     canAccessPath,
     router,
     searchParams,

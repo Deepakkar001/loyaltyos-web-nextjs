@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { campaignCreateHasEventSchemaContent } from "@/lib/campaigns/campaign-create-event-schema";
 import { ApiError, ensureAuthSession, programmeApiV2 } from "@/lib/api/client";
+import { merchantGetProgrammeConfig } from "@/lib/api/merchant";
 import {
   defaultEventSchemaDraft,
   eventSchemaDraftFromCampaign,
@@ -25,6 +26,7 @@ export function CampaignCreateEventSchemaSection() {
     setEventSchemaDraft,
     eventSchemaBootstrappedProgramme,
     setEventSchemaBootstrappedProgramme,
+    portal,
   } = useCampaignForm();
   const programmeUid = form.programmeUid?.trim() ?? "";
 
@@ -36,8 +38,13 @@ export function CampaignCreateEventSchemaSection() {
     if (!programmeUid) return;
     setLoading(true);
     try {
-      await ensureAuthSession();
-      const progBlob = await programmeApiV2.getProgrammeConfig(programmeUid).catch(() => null);
+      const progBlob =
+        portal === "merchant"
+          ? await merchantGetProgrammeConfig(programmeUid)
+          : await (async () => {
+              await ensureAuthSession();
+              return programmeApiV2.getProgrammeConfig(programmeUid);
+            })();
       const progRoot = (progBlob?.config ?? {}) as Record<string, unknown>;
       const empty = eventSchemaDraftFromCampaign({
         programmeConfigRoot: progRoot,
@@ -52,7 +59,7 @@ export function CampaignCreateEventSchemaSection() {
     } finally {
       setLoading(false);
     }
-  }, [programmeUid, setEventSchemaDraft, setEventSchemaBootstrappedProgramme]);
+  }, [programmeUid, portal, setEventSchemaDraft, setEventSchemaBootstrappedProgramme]);
 
   useEffect(() => {
     if (!programmeUid) {

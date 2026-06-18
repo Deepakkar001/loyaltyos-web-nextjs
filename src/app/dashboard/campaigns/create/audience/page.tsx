@@ -8,7 +8,7 @@ export default function CreateCampaignAudiencePage() {
   const { form } = useCampaignForm();
 
   return (
-    <CampaignCreateStepPage stepIndex={1} title="Targeted Audience">
+    <CampaignCreateStepPage stepSlug="audience" title="Targeted Audience">
       <CampaignAudienceSection campaignUid={form.draftCampaignUid} />
     </CampaignCreateStepPage>
   );

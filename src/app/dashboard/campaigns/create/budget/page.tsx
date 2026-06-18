@@ -5,7 +5,7 @@ import { CampaignCreateStepPage } from "../_components/CampaignCreateStepPage";
 
 export default function CreateCampaignBudgetPage() {
   return (
-    <CampaignCreateStepPage stepIndex={3} title="Budget">
+    <CampaignCreateStepPage stepSlug="budget" title="Budget">
       <CampaignBudgetSection />
     </CampaignCreateStepPage>
   );

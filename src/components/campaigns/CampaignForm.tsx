@@ -10,6 +10,8 @@ import {
   CampaignBasicInfoSection,
   CampaignBudgetSection,
 } from "@/components/campaigns/CampaignFormSections";
+import { CampaignMerchantTargetingSection } from "@/components/campaigns/CampaignMerchantTargetingSection";
+import { CampaignOfferSection } from "@/components/campaigns/CampaignOfferSection";
 import {
   CampaignFormProvider,
   useCampaignForm,
@@ -22,27 +24,30 @@ import { Card } from "@/components/ui/card";
 
 export type CampaignFormProps = {
   mode: "create" | "edit";
+  portal?: "tenant" | "merchant";
   campaignUid?: string;
   initialCampaign?: CampaignResponse;
   cancelHref: string;
   onCreated?: (c: CampaignResponse) => void;
 };
 
-function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
+function CampaignEditFormBody({
+  cancelHref,
+  portal,
+}: {
+  cancelHref: string;
+  portal: "tenant" | "merchant";
+}) {
   const router = useRouter();
   const {
     form,
-    preserveOfferConfig,
-    preserveTargetSegment,
     campaignUid,
   } = useCampaignForm();
   const [saving, setSaving] = useState(false);
+  const isMerchant = portal === "merchant";
 
   const submit = async () => {
-    const built = buildCampaignUpsertPayload(form, {
-      preserveOfferConfig,
-      preserveTargetSegment,
-    });
+    const built = buildCampaignUpsertPayload(form);
     if (!built.ok) {
       toast.error(built.error);
       return;
@@ -52,7 +57,7 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
       return;
     }
 
-    if (form.customerScope === "TARGETED") {
+    if (!isMerchant && form.customerScope === "TARGETED") {
       try {
         const c = await campaignsAdminApi.getCampaign(campaignUid);
         if ((c.customerCount ?? 0) <= 0) {
@@ -67,9 +72,19 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
 
     setSaving(true);
     try {
-      await campaignsAdminApi.updateCampaign(campaignUid, built.payload);
-      toast.success("Campaign updated");
-      router.push(`/dashboard/campaigns/${encodeURIComponent(campaignUid)}`);
+      const payload = isMerchant
+        ? { ...built.payload, campaignType: "MERCHANT_FUNDED" as const }
+        : built.payload;
+      if (isMerchant) {
+        const { merchantUpdateCampaign } = await import("@/lib/api/merchant");
+        await merchantUpdateCampaign(campaignUid, payload);
+        toast.success("Campaign updated");
+        router.push(`/merchant/campaigns/${encodeURIComponent(campaignUid)}`);
+      } else {
+        await campaignsAdminApi.updateCampaign(campaignUid, payload);
+        toast.success("Campaign updated");
+        router.push(`/dashboard/campaigns/${encodeURIComponent(campaignUid)}`);
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save campaign");
     } finally {
@@ -80,10 +95,14 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
   return (
     <div className="space-y-6 pb-10">
       <CampaignBasicInfoSection />
-      <Card className="p-6 border-border/70 bg-[var(--surface-card)]">
-        <h2 className="text-sm font-semibold mb-4">Target audience</h2>
-        <CampaignAudienceSection campaignUid={campaignUid} />
-      </Card>
+      {!isMerchant && (
+        <Card className="p-6 border-border/70 bg-[var(--surface-card)]">
+          <h2 className="text-sm font-semibold mb-4">Target audience</h2>
+          <CampaignAudienceSection campaignUid={campaignUid} />
+        </Card>
+      )}
+      <CampaignMerchantTargetingSection />
+      <CampaignOfferSection />
       <CampaignBudgetSection />
 
       <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -102,6 +121,7 @@ function CampaignEditFormBody({ cancelHref }: { cancelHref: string }) {
 
 export function CampaignForm({
   mode,
+  portal = "tenant",
   campaignUid,
   initialCampaign,
   cancelHref,
@@ -115,8 +135,13 @@ export function CampaignForm({
   }
 
   return (
-    <CampaignFormProvider mode={mode} campaignUid={campaignUid} initialCampaign={initialCampaign}>
-      <CampaignEditFormBody cancelHref={cancelHref} />
+    <CampaignFormProvider
+      mode={mode}
+      portal={portal}
+      campaignUid={campaignUid}
+      initialCampaign={initialCampaign}
+    >
+      <CampaignEditFormBody cancelHref={cancelHref} portal={portal} />
     </CampaignFormProvider>
   );
 }

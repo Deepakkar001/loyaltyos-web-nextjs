@@ -23,6 +23,7 @@ import {
   isBrowserPageReload,
 } from "@/lib/store/campaign-draft-storage";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
+import { useMerchantAuthStore } from "@/lib/store/merchant-auth-store";
 import type {
   CampaignOfferConfig,
   CampaignResponse,
@@ -30,9 +31,11 @@ import type {
 } from "@/types/campaigns";
 
 export type CampaignFormMode = "create" | "edit";
+export type CampaignFormPortal = "tenant" | "merchant";
 
 type CampaignFormContextValue = {
   mode: CampaignFormMode;
+  portal: CampaignFormPortal;
   campaignUid?: string;
   preserveOfferConfig?: CampaignOfferConfig;
   preserveTargetSegment?: CampaignTargetSegment;
@@ -56,16 +59,20 @@ export function useCampaignForm() {
 
 export function CampaignFormProvider({
   mode,
+  portal = "tenant",
   campaignUid,
   initialCampaign,
   children,
 }: {
   mode: CampaignFormMode;
+  portal?: CampaignFormPortal;
   campaignUid?: string;
   initialCampaign?: CampaignResponse;
   children: ReactNode;
 }) {
-  const tenantId = useOnboardingStore((s) => s.tenantId);
+  const tenantIdFromStore = useOnboardingStore((s) => s.tenantId);
+  const merchantTenantId = useMerchantAuthStore((s) => s.tenantId);
+  const tenantId = portal === "merchant" ? merchantTenantId : tenantIdFromStore;
   const isCreate = mode === "create";
   const reloadHandledRef = useRef(false);
 
@@ -106,6 +113,7 @@ export function CampaignFormProvider({
 
   const value: CampaignFormContextValue = {
     mode,
+    portal,
     campaignUid,
     preserveOfferConfig: initialCampaign?.offerConfig,
     preserveTargetSegment: initialCampaign?.targetSegment,

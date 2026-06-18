@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo } from "react";
 
+import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { CAMPAIGN_CREATE_STEPS } from "@/lib/campaigns/campaign-form";
+import { getCampaignCreateSteps } from "@/lib/campaigns/campaign-form";
 import { cn } from "@/lib/utils";
 
-const BASE = "/dashboard/campaigns/create";
+const TENANT_BASE = "/dashboard/campaigns/create";
+const MERCHANT_BASE = "/merchant/campaigns/create";
 
 export function CreateCampaignShell({
   title,
@@ -20,26 +22,31 @@ export function CreateCampaignShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { portal } = useCampaignForm();
+  const base = portal === "merchant" ? MERCHANT_BASE : TENANT_BASE;
+  const backHref = portal === "merchant" ? "/merchant/campaigns" : "/dashboard/campaigns";
+  const steps = getCampaignCreateSteps(portal);
 
   const stepIndex = useMemo(() => {
-    const hit = CAMPAIGN_CREATE_STEPS.findIndex((s) => pathname.includes(`${BASE}/${s.slug}`));
+    const hit = steps.findIndex((s) => pathname.includes(`${base}/${s.slug}`));
     return hit >= 0 ? hit : 0;
-  }, [pathname]);
+  }, [pathname, base, steps]);
 
   const progressPct = useMemo(
-    () => Math.round(((stepIndex + 1) / CAMPAIGN_CREATE_STEPS.length) * 100),
-    [stepIndex]
+    () => Math.round(((stepIndex + 1) / steps.length) * 100),
+    [stepIndex, steps.length]
   );
 
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <Link href="/dashboard/campaigns" className="text-sm text-muted-foreground hover:underline">
+          <Link href={backHref} className="text-sm text-muted-foreground hover:underline">
             ← Back to campaigns
           </Link>
           <p className="text-xs text-muted-foreground mt-3">
-            Create Campaign — Step {stepIndex + 1} of {CAMPAIGN_CREATE_STEPS.length}
+            {portal === "merchant" ? "Merchant campaign" : "Create Campaign"} — Step {stepIndex + 1} of{" "}
+            {steps.length}
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">{title}</h1>
           <div className="mt-3">
@@ -50,17 +57,17 @@ export function CreateCampaignShell({
           type="button"
           variant="outline"
           className="rounded-full shrink-0"
-          onClick={() => router.push("/dashboard/campaigns")}
+          onClick={() => router.push(backHref)}
         >
           Cancel
         </Button>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {CAMPAIGN_CREATE_STEPS.map((s, idx) => {
+        {steps.map((s, idx) => {
           const active = idx === stepIndex;
           const done = idx < stepIndex;
-          const href = `${BASE}/${s.slug}`;
+          const href = `${base}/${s.slug}`;
           return (
             <Link
               key={s.slug}

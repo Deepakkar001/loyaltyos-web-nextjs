@@ -14,12 +14,16 @@ type CampaignAudienceSectionProps = {
 };
 
 export function CampaignAudienceSection({ campaignUid }: CampaignAudienceSectionProps) {
-  const { form, patch } = useCampaignForm();
+  const { form, patch, portal } = useCampaignForm();
   const [customerCount, setCustomerCount] = useState(0);
-  /** Avoid overwriting local radio selection with stale server scope (draft may still be ALL). */
   const scopeHydratedForUid = useRef<string | null>(null);
+  const isMerchant = portal === "merchant";
 
   useEffect(() => {
+    if (isMerchant) {
+      patch({ customerScope: "ALL" });
+      return;
+    }
     if (!campaignUid) return;
     void (async () => {
       try {
@@ -35,11 +39,23 @@ export function CampaignAudienceSection({ campaignUid }: CampaignAudienceSection
         // panel handles empty state
       }
     })();
-  }, [campaignUid, patch]);
+  }, [campaignUid, patch, isMerchant]);
 
   const setScope = (scope: CustomerScope) => {
     patch({ customerScope: scope });
   };
+
+  if (isMerchant) {
+    return (
+      <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+        <Label className="text-sm font-semibold">Target audience</Label>
+        <p className="text-sm text-muted-foreground">
+          Merchant-funded campaigns apply to all customers who meet your event and schedule rules.
+          Customer list targeting is managed by your programme administrator.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

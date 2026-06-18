@@ -209,6 +209,9 @@ function messageFromResponseData(data: unknown): string | undefined {
   if (typeof record.errorMessage === "string" && record.errorMessage.trim()) {
     return record.errorMessage;
   }
+  if (typeof record.detail === "string" && record.detail.trim()) {
+    return record.detail;
+  }
   return undefined;
 }
 
@@ -253,12 +256,29 @@ function handleError(err: AxiosError<ApiErrorResponse>): never {
 // ─── Onboarding API service ───────────────────────────────────────────────────
 
 export const onboardingApi = {
-  /** Auth — tenant admin login */
+  /** Auth — tenant admin login (legacy; prefer signIn for unified portal entry) */
   login: async (email: string, password: string): Promise<LoginResponse> => {
     try {
       const res: AxiosResponse<LoginResponse> = await apiClient.post(
         "/api/v1/auth/login",
         { email, password }
+      );
+      return res.data;
+    } catch (err) {
+      handleError(err as AxiosError<ApiErrorResponse>);
+    }
+  },
+  /** Unified sign-in — tenant admin or merchant partner */
+  signIn: async (body: {
+    email: string;
+    password: string;
+    tenantId?: string;
+  }): Promise<import("@/types/auth").UnifiedSignInResponse> => {
+    try {
+      const res = await apiClient.post<import("@/types/auth").UnifiedSignInResponse>(
+        "/api/v1/auth/sign-in",
+        body,
+        { skipAuth: true }
       );
       return res.data;
     } catch (err) {

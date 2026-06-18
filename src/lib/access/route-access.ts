@@ -24,6 +24,13 @@ export function resolveRoutePermission(
   return best?.permissionKey ?? null;
 }
 
+/** Fallback guards for nested routes when catalog nav items are missing (e.g. merchant onboarding). */
+const SUPPLEMENTAL_ROUTE_PERMISSIONS: Array<{ path: string; permission: string }> = [
+  { path: "/dashboard/configure/merchants", permission: "merchants.view" },
+  { path: "/dashboard/campaign-rules/create", permission: "campaigns.create" },
+  { path: "/dashboard/loyalty-rules/create", permission: "loyalty_rules.create" },
+];
+
 export function canAccessDashboardPath(
   pathname: string,
   permissions: string[],
@@ -33,9 +40,23 @@ export function canAccessDashboardPath(
   if (!options?.enforcementEnabled) return true;
   if (pathname === "/dashboard" || pathname === "/dashboard/") return true;
 
-  const required = resolveRoutePermission(pathname, routeGuards);
+  let required = resolveRoutePermission(pathname, routeGuards);
+  if (required == null) {
+    required = resolveSupplementalRoutePermission(pathname);
+  }
   if (required == null) {
     return false;
   }
   return permissions.includes(required);
+}
+
+function resolveSupplementalRoutePermission(pathname: string): string | null {
+  let best: { path: string; permission: string } | null = null;
+  for (const entry of SUPPLEMENTAL_ROUTE_PERMISSIONS) {
+    if (!pathMatches(entry.path, pathname)) continue;
+    if (!best || entry.path.length > best.path.length) {
+      best = entry;
+    }
+  }
+  return best?.permission ?? null;
 }

@@ -3,31 +3,31 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
+import { Megaphone } from "lucide-react";
+
 import {
-  getMerchantToken,
-  merchantCreateCampaign,
-  merchantListCampaigns,
-} from "@/lib/api/merchant";
+  MerchantEmptyState,
+  MerchantPageHeader,
+  MerchantPageLoader,
+  MerchantPrimaryButton,
+  MerchantStatusBadge,
+} from "@/components/merchant/merchant-ui";
+import { Progress } from "@/components/ui/progress";
+import { getMerchantToken, merchantListCampaigns } from "@/lib/api/merchant";
+import { PORTAL_LOGIN_PATH } from "@/lib/auth/paths";
 import type { CampaignResponse } from "@/types/campaigns";
-import { Button } from "@/components/ui/button";
 
 export default function MerchantCampaignsPage() {
   const router = useRouter();
   const [campaigns, setCampaigns] = useState<CampaignResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState("");
-  const [programmeUid, setProgrammeUid] = useState("default");
-  const [budgetTotal, setBudgetTotal] = useState(10000);
-  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setCampaigns(await merchantListCampaigns());
     } catch {
-      router.replace("/merchant/login");
+      router.replace(PORTAL_LOGIN_PATH);
     } finally {
       setLoading(false);
     }
@@ -35,114 +35,77 @@ export default function MerchantCampaignsPage() {
 
   useEffect(() => {
     if (!getMerchantToken()) {
-      router.replace("/merchant/login");
+      router.replace(PORTAL_LOGIN_PATH);
       return;
     }
     void load();
   }, [load, router]);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      const now = new Date();
-      const validFrom = now.toISOString();
-      const validUntil = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
-      await merchantCreateCampaign({
-        programmeUid,
-        name,
-        campaignType: "MERCHANT_FUNDED",
-        triggerEventType: "PURCHASE",
-        budgetTotal,
-        validFrom,
-        validUntil,
-        offerConfig: {
-          awardType: "POINTS_BONUS",
-          bonusPoints: 100,
-        },
-      });
-      toast.success("Campaign submitted for tenant approval");
-      setName("");
-      setShowForm(false);
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Create failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   return (
-    <div className="min-h-screen p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">My campaigns</h1>
-        <Link href="/merchant/dashboard" className="text-sm text-primary underline">
-          Back to dashboard
-        </Link>
-      </div>
-
-      <Button type="button" onClick={() => setShowForm((v) => !v)}>
-        {showForm ? "Cancel" : "New campaign"}
-      </Button>
-
-      {showForm && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-border p-4 space-y-3">
-          <input
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder="Campaign name"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder="Programme UID"
-            required
-            value={programmeUid}
-            onChange={(e) => setProgrammeUid(e.target.value)}
-          />
-          <input
-            type="number"
-            min={1}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder="Budget"
-            required
-            value={budgetTotal}
-            onChange={(e) => setBudgetTotal(Number(e.target.value))}
-          />
-          <p className="text-xs text-muted-foreground">
-            Merchant-funded campaigns require tenant approval before going live.
-          </p>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit for approval"}
-          </Button>
-        </form>
-      )}
+    <div className="space-y-8">
+      <MerchantPageHeader
+        title="Campaigns"
+        description="Create and manage merchant-funded campaigns. New campaigns require tenant approval before going live."
+        action={
+          <MerchantPrimaryButton href="/merchant/campaigns/create/basic-info">
+            New campaign
+          </MerchantPrimaryButton>
+        }
+      />
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading campaigns…</p>
+        <MerchantPageLoader label="Loading campaigns…" />
       ) : campaigns.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No campaigns yet.</p>
+        <MerchantEmptyState
+          icon={Megaphone}
+          title="No campaigns yet"
+          description="Start by creating a campaign with your budget, audience, and offer rules. Your programme administrator will review it before activation."
+          actionHref="/merchant/campaigns/create/basic-info"
+          actionLabel="Create campaign"
+        />
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left p-2">Name</th>
-                <th className="text-left p-2">Status</th>
-                <th className="text-left p-2">Pending approval</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.map((c) => (
-                <tr key={c.campaignUid} className="border-t border-border">
-                  <td className="p-2">{c.name}</td>
-                  <td className="p-2">{c.status}</td>
-                  <td className="p-2">{c.pendingMerchantApproval ? "Yes" : "No"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-4">
+          {campaigns.map((c) => {
+            const pct = c.budgetConsumedPct ?? 0;
+            return (
+              <Link
+                key={c.campaignUid}
+                href={`/merchant/campaigns/${encodeURIComponent(c.campaignUid)}`}
+                className="group block rounded-2xl border border-border/50 bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)] transition-all hover:border-emerald-500/25 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-400">
+                      {c.name}
+                    </p>
+                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                      {c.campaignUid}
+                    </p>
+                  </div>
+                  <MerchantStatusBadge
+                    status={c.status}
+                    pending={c.pendingMerchantApproval}
+                  />
+                </div>
+
+                <div className="mt-5 space-y-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>
+                      Budget: {(c.budgetConsumed ?? 0).toLocaleString()} /{" "}
+                      {(c.budgetTotal ?? 0).toLocaleString()}
+                    </span>
+                    <span className="font-medium text-foreground">
+                      {Number(pct).toFixed(1)}% used
+                    </span>
+                  </div>
+                  <Progress
+                    value={Number(pct) || 0}
+                    className="h-2 bg-muted/60 [&>div]:bg-emerald-500"
+                  />
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

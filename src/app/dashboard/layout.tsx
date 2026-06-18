@@ -200,12 +200,15 @@ function isPathAllowedDuringOnboarding(pathname: string): boolean {
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { onboardingStatus } = useOnboardingStore();
-  const { dynamicNavEnabled, navGroups: apiNavGroups } = useAccess();
+  const { dynamicNavEnabled, loading: accessLoading, navGroups: apiNavGroups } = useAccess();
   const fraudQueueCount = useReferralNavStore((s) => s.fraudQueueCount);
   const onboardingComplete = isOnboardingComplete(onboardingStatus);
 
   const navGroups = useMemo(() => {
-    if (dynamicNavEnabled && apiNavGroups.length > 0) {
+    if (dynamicNavEnabled) {
+      if (accessLoading || apiNavGroups.length === 0) {
+        return onboardingComplete ? [] : [SETUP_PROGRESS_GROUP];
+      }
       const fromApi: NavGroup[] = apiNavGroups.map((g) => ({
         label: g.label,
         items: g.items.map((item) => ({
@@ -219,7 +222,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
     return onboardingComplete
       ? MAIN_NAV_GROUPS
       : [SETUP_PROGRESS_GROUP, ...MAIN_NAV_GROUPS];
-  }, [dynamicNavEnabled, apiNavGroups, onboardingComplete]);
+  }, [dynamicNavEnabled, accessLoading, apiNavGroups, onboardingComplete]);
 
   // Pick the single best-matching nav href (longest prefix wins) so a parent
   // and a more-specific child don't light up simultaneously.

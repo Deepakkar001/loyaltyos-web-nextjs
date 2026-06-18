@@ -50,6 +50,8 @@ export interface CampaignUpsertRequest {
   validFrom: string;
   validUntil: string;
   customerScope?: CustomerScope;
+  /** Optional — persisted atomically with create/update when provided. */
+  eventSchema?: Record<string, unknown>;
 }
 
 export interface CampaignEventSchemaUpsertRequest {

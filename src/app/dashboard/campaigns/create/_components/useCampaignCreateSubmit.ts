@@ -10,16 +10,52 @@ import {
   validateCampaignCreateEventSchemaStep,
 } from "@/lib/campaigns/campaign-create-event-schema";
 import { campaignsAdminApi, ApiError } from "@/lib/api/client";
-import { buildCampaignUpsertPayload } from "@/lib/campaigns/campaign-form";
+import { merchantCreateCampaign } from "@/lib/api/merchant";
+import {
+  buildCampaignUpsertPayload,
+  validateCampaignCreateStep,
+  getCampaignCreateStepIndex,
+} from "@/lib/campaigns/campaign-form";
+import type { CampaignUpsertRequest } from "@/types/campaigns";
 import { buildEventSchemaJsonNode } from "@/lib/programme/event-schema-merge";
+
+function withOptionalEventSchema(
+  payload: CampaignUpsertRequest,
+  eventSchemaDraft: Parameters<typeof buildEventSchemaJsonNode>[0]
+): CampaignUpsertRequest {
+  if (!campaignCreateHasEventSchemaContent(eventSchemaDraft)) {
+    return payload;
+  }
+  return {
+    ...payload,
+    eventSchema: buildEventSchemaJsonNode(eventSchemaDraft),
+  };
+}
 
 export function useCampaignCreateSubmit() {
   const router = useRouter();
-  const { form, eventSchemaDraft, clearDraft } = useCampaignForm();
+  const { form, eventSchemaDraft, clearDraft, portal } = useCampaignForm();
   const [saving, setSaving] = useState(false);
+  const isMerchant = portal === "merchant";
 
   const submit = async () => {
-    const built = buildCampaignUpsertPayload(form, {});
+    const targetingIdx = getCampaignCreateStepIndex(portal, "targeting");
+    const offerIdx = getCampaignCreateStepIndex(portal, "offer");
+    const targetingErr = validateCampaignCreateStep(targetingIdx, form, {
+      eventSchemaDraft,
+      portal,
+    });
+    if (targetingErr) {
+      toast.error(targetingErr);
+      return;
+    }
+    const offerErr = validateCampaignCreateStep(offerIdx, form, { portal });
+    if (offerErr) {
+      toast.error(offerErr);
+      return;
+    }
+
+    const built = buildCampaignUpsertPayload(form);
     if (!built.ok) {
       toast.error(built.error);
       return;
@@ -31,7 +67,7 @@ export function useCampaignCreateSubmit() {
       return;
     }
 
-    if (form.customerScope === "TARGETED") {
+    if (!isMerchant && form.customerScope === "TARGETED") {
       const uid = form.draftCampaignUid;
       if (!uid) {
         toast.error("Save campaign and upload customer list before publishing.");
@@ -51,33 +87,26 @@ export function useCampaignCreateSubmit() {
 
     setSaving(true);
     try {
-      const draftUid = form.draftCampaignUid?.trim();
-      const saved = draftUid
-        ? await campaignsAdminApi.updateCampaign(draftUid, built.payload)
-        : await campaignsAdminApi.createCampaign(built.payload);
-
-      if (campaignCreateHasEventSchemaContent(eventSchemaDraft)) {
-        try {
-          await campaignsAdminApi.upsertCampaignEventSchema(saved.campaignUid, {
-            eventSchema: buildEventSchemaJsonNode(eventSchemaDraft),
-          });
-        } catch (schemaSaveErr) {
-          const msg =
-            schemaSaveErr instanceof ApiError
-              ? schemaSaveErr.message
-              : schemaSaveErr instanceof Error
-                ? schemaSaveErr.message
-                : "Failed to save event schema";
-          toast.error(
-            `Campaign saved but event schema was not saved: ${msg}. Update it under Event Schema.`
-          );
-          clearDraft();
-          router.push(
-            `/dashboard/campaign-rules/create/campaign?campaignUid=${encodeURIComponent(saved.campaignUid)}&fromCampaignWizard=1`
-          );
-          return;
-        }
+      if (isMerchant) {
+        const payload = withOptionalEventSchema(
+          {
+            ...built.payload,
+            campaignType: "MERCHANT_FUNDED" as const,
+          },
+          eventSchemaDraft
+        );
+        await merchantCreateCampaign(payload);
+        toast.success("Campaign submitted for tenant approval");
+        clearDraft();
+        router.push("/merchant/campaigns");
+        return;
       }
+
+      const draftUid = form.draftCampaignUid?.trim();
+      const payload = withOptionalEventSchema(built.payload, eventSchemaDraft);
+      const saved = draftUid
+        ? await campaignsAdminApi.updateCampaign(draftUid, payload)
+        : await campaignsAdminApi.createCampaign(payload);
 
       toast.success(
         campaignCreateHasEventSchemaContent(eventSchemaDraft)
@@ -89,7 +118,13 @@ export function useCampaignCreateSubmit() {
         `/dashboard/campaign-rules/create/campaign?campaignUid=${encodeURIComponent(saved.campaignUid)}&fromCampaignWizard=1`
       );
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to save campaign");
+      const msg =
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "Failed to save campaign";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

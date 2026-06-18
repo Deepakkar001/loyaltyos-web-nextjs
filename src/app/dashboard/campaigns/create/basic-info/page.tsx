@@ -5,7 +5,7 @@ import { CampaignCreateStepPage } from "../_components/CampaignCreateStepPage";
 
 export default function CreateCampaignBasicInfoPage() {
   return (
-    <CampaignCreateStepPage stepIndex={0} title="Basic Info">
+    <CampaignCreateStepPage stepSlug="basic-info" title="Basic Info">
       <CampaignBasicInfoSection />
     </CampaignCreateStepPage>
   );

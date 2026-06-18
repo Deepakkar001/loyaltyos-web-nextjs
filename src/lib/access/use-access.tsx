@@ -170,7 +170,11 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
       if (loading) return false;
 
-      const routeGuards = access?.routeGuards ?? [];
+      // Access not resolved yet (or /me/access failed) — do not block navigation client-side;
+      // API layer still enforces module and permission checks.
+      if (!access) return true;
+
+      const routeGuards = access.routeGuards ?? [];
 
       return canAccessDashboardPath(pathname, permissions, routeGuards, {
 
@@ -180,7 +184,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
     },
 
-    [access?.routeGuards, permissions, loading]
+    [access, permissions, loading]
 
   );
 

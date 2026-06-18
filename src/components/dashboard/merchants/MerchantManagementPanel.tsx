@@ -1,11 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   Building2,
   CheckCircle2,
+  ChevronRight,
   Clock,
+  Download,
   Plus,
   RefreshCw,
   Search,
@@ -13,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { MerchantDetailPanel } from "@/components/dashboard/merchants/MerchantDetailPanel";
+import { MerchantGovernancePanel } from "@/components/dashboard/merchants/MerchantGovernancePanel";
 import { MerchantStageBadge } from "@/components/dashboard/merchants/MerchantStageBadge";
 import { Authorize } from "@/components/access/authorize";
 import { Button } from "@/components/ui/button";
@@ -30,14 +34,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { merchantApi } from "@/lib/api/merchant";
+import { merchantContinueHref, merchantDetailHref } from "@/lib/merchants/onboarding-steps";
 import { cn } from "@/lib/utils";
 import type { CampaignResponse } from "@/types/campaigns";
 import type {
   CreateMerchantRequest,
-  MerchantActivateResponse,
-  MerchantApiKeyResponse,
-  MerchantIntegrationTestRequest,
-  MerchantOnboardingAudit,
   MerchantOnboardingStage,
   MerchantResponse,
 } from "@/types/merchant";
@@ -60,13 +61,6 @@ const STAGE_FILTER_OPTIONS: Array<{ value: MerchantOnboardingStage | "ALL"; labe
   { value: "ACTIVE", label: "Active" },
   { value: "SUSPENDED", label: "Suspended" },
 ];
-
-const DEFAULT_INTEGRATION_TEST: MerchantIntegrationTestRequest = {
-  customerId: "sandbox-customer-1",
-  eventType: "PURCHASE",
-  amount: 100,
-  channel: "sandbox",
-};
 
 const EMPTY_FORM: CreateMerchantRequest = {
   legalName: "",
@@ -102,23 +96,17 @@ function StatCard({
 }
 
 export function MerchantManagementPanel() {
+  const router = useRouter();
   const [merchants, setMerchants] = useState<MerchantResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUid, setSelectedUid] = useState<string | null>(null);
-  const [activateResult, setActivateResult] = useState<MerchantActivateResponse | null>(null);
   const [pendingCampaigns, setPendingCampaigns] = useState<CampaignResponse[]>([]);
-  const [auditTrail, setAuditTrail] = useState<MerchantOnboardingAudit[]>([]);
-  const [apiKeys, setApiKeys] = useState<MerchantApiKeyResponse[]>([]);
-  const [newApiKey, setNewApiKey] = useState<string | null>(null);
-  const [integrationTest, setIntegrationTest] = useState<MerchantIntegrationTestRequest>(
-    DEFAULT_INTEGRATION_TEST
-  );
   const [registerOpen, setRegisterOpen] = useState(false);
   const [registerSubmitting, setRegisterSubmitting] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<MerchantOnboardingStage | "ALL">("ALL");
   const [form, setForm] = useState<CreateMerchantRequest>(EMPTY_FORM);
+  const [emailCheckMessage, setEmailCheckMessage] = useState<string | null>(null);
+  const [emailChecking, setEmailChecking] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,17 +127,6 @@ export function MerchantManagementPanel() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (!selectedUid) {
-      setAuditTrail([]);
-      setApiKeys([]);
-      setNewApiKey(null);
-      return;
-    }
-    void merchantApi.audit(selectedUid).then(setAuditTrail).catch(() => setAuditTrail([]));
-    void merchantApi.listApiKeys(selectedUid).then(setApiKeys).catch(() => setApiKeys([]));
-  }, [selectedUid]);
 
   const stats = useMemo(
     () => ({
@@ -174,43 +151,49 @@ export function MerchantManagementPanel() {
     });
   }, [merchants, query, stageFilter]);
 
-  const selected = merchants.find((m) => m.merchantUid === selectedUid) ?? null;
+  async function validateContactEmail(email: string) {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailCheckMessage(null);
+      return true;
+    }
+    setEmailChecking(true);
+    try {
+      const result = await merchantApi.checkEmail(trimmed);
+      if (!result.available) {
+        setEmailCheckMessage(result.message ?? "This email cannot be used for a merchant.");
+        return false;
+      }
+      setEmailCheckMessage(null);
+      return true;
+    } catch {
+      setEmailCheckMessage(null);
+      return true;
+    } finally {
+      setEmailChecking(false);
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    const emailOk = await validateContactEmail(form.contactEmail);
+    if (!emailOk) {
+      toast.error(emailCheckMessage ?? "Contact email is not available.");
+      return;
+    }
     setRegisterSubmitting(true);
     try {
       const created = await merchantApi.create(form);
       toast.success(`Merchant ${created.merchantUid} registered`);
       setForm(EMPTY_FORM);
+      setEmailCheckMessage(null);
       setRegisterOpen(false);
       await load();
-      setSelectedUid(created.merchantUid);
+      window.location.href = merchantContinueHref(created.merchantUid, created.onboardingStage);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Create failed");
     } finally {
       setRegisterSubmitting(false);
-    }
-  }
-
-  async function runStep(
-    action: () => Promise<MerchantResponse | MerchantActivateResponse>,
-    label: string
-  ) {
-    if (!selectedUid) return;
-    setActionLoading(true);
-    try {
-      const result = await action();
-      if ("temporaryPassword" in result && result.temporaryPassword) {
-        setActivateResult(result as MerchantActivateResponse);
-      }
-      toast.success(label);
-      await load();
-      setAuditTrail(await merchantApi.audit(selectedUid).catch(() => []));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Action failed");
-    } finally {
-      setActionLoading(false);
     }
   }
 
@@ -228,20 +211,43 @@ export function MerchantManagementPanel() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Authorize permission="merchants.export">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={async () => {
+                try {
+                  const blob = await merchantApi.exportCsv();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "merchants-export.csv";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Export failed");
+                }
+              }}
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Export CSV
+            </Button>
+          </Authorize>
           <Button variant="outline" size="sm" className="rounded-full" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={cn("h-4 w-4 mr-1.5", loading && "animate-spin")} />
             Refresh
           </Button>
-          <Authorize permission="merchants.create">
           <Authorize permission="merchants.create">
             <Button size="sm" className="rounded-full" onClick={() => setRegisterOpen(true)}>
               <Plus className="h-4 w-4 mr-1.5" />
               Register merchant
             </Button>
           </Authorize>
-          </Authorize>
         </div>
       </div>
+
+      <MerchantGovernancePanel onAction={() => void load()} />
 
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -289,7 +295,18 @@ export function MerchantManagementPanel() {
                 <div className="min-w-0">
                   <p className="font-medium truncate">{c.name}</p>
                   <p className="text-xs text-muted-foreground font-mono truncate">
-                    {c.merchantId} · {c.campaignUid}
+                    {c.merchantId ? (
+                      <Link
+                        href={merchantDetailHref(c.merchantId)}
+                        className="hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {c.merchantId}
+                      </Link>
+                    ) : (
+                      c.merchantId
+                    )}{" "}
+                    · {c.campaignUid}
                   </p>
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -389,80 +406,54 @@ export function MerchantManagementPanel() {
           )}
         </Card>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-5">
-          <Card className="xl:col-span-3 border-border/70 bg-[var(--surface-card)] overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 bg-muted/30 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <th className="px-4 py-3 min-w-[200px]">Merchant</th>
-                    <th className="px-4 py-3 min-w-[100px]">Category</th>
-                    <th className="px-4 py-3 min-w-[120px]">Stage</th>
-                    <th className="px-4 py-3 min-w-[80px]">Earn rate</th>
+        <Card className="border-border/70 bg-[var(--surface-card)] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/60 bg-muted/30 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-3 min-w-[220px]">Merchant</th>
+                  <th className="px-4 py-3 min-w-[100px]">Category</th>
+                  <th className="px-4 py-3 min-w-[120px]">Stage</th>
+                  <th className="px-4 py-3 min-w-[80px]">Earn rate</th>
+                  <th className="px-4 py-3 min-w-[100px] text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m) => (
+                  <tr
+                    key={m.merchantUid}
+                    className="border-b border-border/40 last:border-0 cursor-pointer transition-colors hover:bg-muted/20"
+                    onClick={() => router.push(merchantDetailHref(m.merchantUid))}
+                  >
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{m.legalName}</p>
+                      <p className="text-xs text-muted-foreground font-mono truncate max-w-[280px]">
+                        {m.merchantUid}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{m.category ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <MerchantStageBadge stage={m.onboardingStage} />
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                      {m.earnRateMultiplier != null ? `${m.earnRateMultiplier}×` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={merchantDetailHref(m.merchantUid)}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Manage
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((m) => (
-                    <tr
-                      key={m.merchantUid}
-                      className={cn(
-                        "border-b border-border/40 last:border-0 cursor-pointer transition-colors",
-                        selectedUid === m.merchantUid
-                          ? "bg-primary/5 hover:bg-primary/8"
-                          : "hover:bg-muted/20"
-                      )}
-                      onClick={() => {
-                        setSelectedUid(m.merchantUid);
-                        setActivateResult(null);
-                        setNewApiKey(null);
-                      }}
-                    >
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{m.legalName}</p>
-                        <p className="text-xs text-muted-foreground font-mono truncate max-w-[220px]">
-                          {m.merchantUid}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{m.category ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <MerchantStageBadge stage={m.onboardingStage} />
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                        {m.earnRateMultiplier != null ? `${m.earnRateMultiplier}×` : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <div className="xl:col-span-2">
-            {selected ? (
-              <MerchantDetailPanel
-                merchant={selected}
-                activateResult={activateResult}
-                integrationTest={integrationTest}
-                onIntegrationTestChange={setIntegrationTest}
-                auditTrail={auditTrail}
-                apiKeys={apiKeys}
-                newApiKey={newApiKey}
-                onNewApiKey={setNewApiKey}
-                onApiKeysChange={setApiKeys}
-                onRunStep={runStep}
-                actionLoading={actionLoading}
-              />
-            ) : (
-              <Card className="border-border/70 bg-[var(--surface-card)] p-8 text-center h-full min-h-[320px] flex flex-col items-center justify-center">
-                <Users className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                <p className="text-sm font-medium">Select a merchant</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">
-                  Choose a row to manage onboarding, API keys, and audit history.
-                </p>
-              </Card>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Register dialog */}
@@ -513,8 +504,21 @@ export function MerchantManagementPanel() {
                 required
                 placeholder="partner@acme.com"
                 value={form.contactEmail}
-                onChange={(e) => setForm({ ...form, contactEmail: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, contactEmail: e.target.value });
+                  if (emailCheckMessage) setEmailCheckMessage(null);
+                }}
+                onBlur={() => void validateContactEmail(form.contactEmail)}
               />
+              <p className="text-xs text-muted-foreground">
+                Must be unique — not used by another merchant, tenant admin, or tenant user.
+              </p>
+              {emailChecking && (
+                <p className="text-xs text-muted-foreground">Checking email availability…</p>
+              )}
+              {emailCheckMessage && (
+                <p className="text-xs text-destructive">{emailCheckMessage}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="tax-id">Tax ID</Label>
@@ -526,12 +530,26 @@ export function MerchantManagementPanel() {
                 onChange={(e) => setForm({ ...form, taxId: e.target.value })}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bank-ref">Bank / payout reference (optional)</Label>
+              <Input
+                id="bank-ref"
+                placeholder="Vault ref or account identifier"
+                value={form.bankDetailsVaultRef ?? ""}
+                onChange={(e) => setForm({ ...form, bankDetailsVaultRef: e.target.value })}
+              />
+            </div>
           </form>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRegisterOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="register-merchant-form" disabled={registerSubmitting} className="rounded-full">
+            <Button
+              type="submit"
+              form="register-merchant-form"
+              disabled={registerSubmitting || emailChecking || !!emailCheckMessage}
+              className="rounded-full"
+            >
               {registerSubmitting ? "Registering…" : "Register merchant"}
             </Button>
           </DialogFooter>

@@ -5,6 +5,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { useCampaignForm } from "@/components/campaigns/campaign-create-context";
 import { CAMPAIGN_FIELD_PLACEHOLDERS as P } from "@/lib/campaigns/campaign-form";
 import { useProgrammeDropdown } from "@/lib/programme/use-programme-dropdown";
+import { useMerchantProgrammeDropdown } from "@/lib/programme/use-merchant-programme-dropdown";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { Card } from "@/components/ui/card";
 import { FieldHelp } from "@/components/ui/field-help";
@@ -34,13 +35,13 @@ function SectionCard({
 }
 
 export function CampaignBasicInfoSection() {
-  const { mode, form, patch } = useCampaignForm();
+  const { mode, form, patch, portal } = useCampaignForm();
   const tenantId = useOnboardingStore((s) => s.tenantId);
   const isEdit = mode === "edit";
-  const { selectOptions, loading: programmesLoading } = useProgrammeDropdown(
-    tenantId,
-    form.programmeUid
-  );
+  const tenantProgrammes = useProgrammeDropdown(tenantId, form.programmeUid);
+  const merchantProgrammes = useMerchantProgrammeDropdown(form.programmeUid);
+  const { selectOptions, loading: programmesLoading } =
+    portal === "merchant" ? merchantProgrammes : tenantProgrammes;
 
   useEffect(() => {
     if (isEdit || programmesLoading || selectOptions.length === 0) return;

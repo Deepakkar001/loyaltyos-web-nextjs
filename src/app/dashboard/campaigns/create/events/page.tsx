@@ -5,7 +5,7 @@ import { CampaignCreateStepPage } from "../_components/CampaignCreateStepPage";
 
 export default function CreateCampaignEventsPage() {
   return (
-    <CampaignCreateStepPage stepIndex={2} title="Events">
+    <CampaignCreateStepPage stepSlug="events" title="Events">
       <CampaignCreateEventSchemaSection />
     </CampaignCreateStepPage>
   );

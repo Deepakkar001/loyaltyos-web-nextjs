@@ -8,34 +8,39 @@ import { useCampaignForm } from "@/components/campaigns/campaign-create-context"
 import { Button } from "@/components/ui/button";
 import { campaignsAdminApi } from "@/lib/api/client";
 import {
-  CAMPAIGN_CREATE_STEPS,
+  getCampaignCreateSteps,
   validateCampaignCreateStep,
+  type CampaignCreateStepSlug,
 } from "@/lib/campaigns/campaign-form";
 import { persistCampaignDraft } from "@/lib/campaigns/persist-campaign-draft";
 
-const BASE = "/dashboard/campaigns/create";
-
-export function CampaignCreateStepNav({ stepIndex }: { stepIndex: number }) {
+export function CampaignCreateStepNav({ stepSlug }: { stepSlug: CampaignCreateStepSlug }) {
   const router = useRouter();
-  const { form, patch, eventSchemaDraft } = useCampaignForm();
+  const { form, patch, eventSchemaDraft, portal } = useCampaignForm();
   const [saving, setSaving] = useState(false);
+  const base =
+    portal === "merchant" ? "/merchant/campaigns/create" : "/dashboard/campaigns/create";
+  const backList = portal === "merchant" ? "/merchant/campaigns" : "/dashboard/campaigns";
+  const isMerchant = portal === "merchant";
 
-  const isFirst = stepIndex === 0;
-  const isReview = stepIndex === CAMPAIGN_CREATE_STEPS.length - 1;
-  const nextStep = CAMPAIGN_CREATE_STEPS[stepIndex + 1];
-  const prevStep = CAMPAIGN_CREATE_STEPS[stepIndex - 1];
+  const steps = getCampaignCreateSteps(portal);
+  const stepIndex = steps.findIndex((s) => s.slug === stepSlug);
+  const isFirst = stepIndex <= 0;
+  const isReview = stepIndex === steps.length - 1;
+  const nextStep = steps[stepIndex + 1];
+  const prevStep = steps[stepIndex - 1];
 
   const onBack = () => {
     if (isFirst) {
-      router.push("/dashboard/campaigns");
+      router.push(backList);
       return;
     }
-    router.push(`${BASE}/${prevStep.slug}`);
+    router.push(`${base}/${prevStep.slug}`);
   };
 
   const onNext = async () => {
     let targetCustomerCount: number | undefined;
-    if (stepIndex === 1 && form.customerScope === "TARGETED" && form.draftCampaignUid) {
+    if (!isMerchant && stepSlug === "audience" && form.customerScope === "TARGETED" && form.draftCampaignUid) {
       try {
         const c = await campaignsAdminApi.getCampaign(form.draftCampaignUid);
         targetCustomerCount = c.customerCount ?? 0;
@@ -47,13 +52,14 @@ export function CampaignCreateStepNav({ stepIndex }: { stepIndex: number }) {
     const err = validateCampaignCreateStep(stepIndex, form, {
       eventSchemaDraft,
       targetCustomerCount,
+      portal,
     });
     if (err) {
       toast.error(err);
       return;
     }
 
-    if (stepIndex === 0 || stepIndex === 1) {
+    if (!isMerchant && (stepSlug === "basic-info" || stepSlug === "audience")) {
       setSaving(true);
       try {
         const result = await persistCampaignDraft(form, form.draftCampaignUid);
@@ -70,7 +76,7 @@ export function CampaignCreateStepNav({ stepIndex }: { stepIndex: number }) {
       }
     }
 
-    if (nextStep) router.push(`${BASE}/${nextStep.slug}`);
+    if (nextStep) router.push(`${base}/${nextStep.slug}`);
   };
 
   if (isReview) {

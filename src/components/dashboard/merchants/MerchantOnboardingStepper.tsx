@@ -24,7 +24,13 @@ function stageIndex(stage: MerchantOnboardingStage): number {
   return FLOW.indexOf(stage);
 }
 
-export function MerchantOnboardingStepper({ stage }: { stage: MerchantOnboardingStage }) {
+export function MerchantOnboardingStepper({
+  stage,
+  compact = true,
+}: {
+  stage: MerchantOnboardingStage;
+  compact?: boolean;
+}) {
   const current = stageIndex(stage);
   const suspended = stage === "SUSPENDED";
 
@@ -50,7 +56,8 @@ export function MerchantOnboardingStepper({ stage }: { stage: MerchantOnboarding
                 </div>
                 <span
                   className={cn(
-                    "text-[10px] sm:text-xs font-medium text-center truncate w-full px-0.5",
+                    "text-xs font-medium text-center w-full px-0.5",
+                    compact ? "truncate" : "whitespace-nowrap",
                     active ? "text-foreground" : "text-muted-foreground"
                   )}
                 >
