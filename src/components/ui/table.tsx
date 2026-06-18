@@ -140,25 +140,25 @@ function buildSearchPlaceholder<TData>(columns: ColumnDef<TData, unknown>[]): st
 
 const PAGE_SIZE_STEP = 5;
 
-/** Round up to the next step (e.g. 22 → 25) for the max rows-per-page option. */
-function ceilToPageSizeStep(totalRows: number, step = PAGE_SIZE_STEP): number {
-  if (totalRows <= 0) return step;
-  return Math.max(step, Math.ceil(totalRows / step) * step);
-}
-
-/** Build 5, 10, 15, … up to the ceiling for the current row count. */
+/** Build row-size options in steps of 5, with the last option capped at total entries. */
 export function buildPageSizeOptions(totalRows: number, step = PAGE_SIZE_STEP): number[] {
-  const max = ceilToPageSizeStep(totalRows, step);
+  if (totalRows <= 0) return [step];
+
+  if (totalRows < step) return [totalRows];
+
   const options: number[] = [];
-  for (let size = step; size <= max; size += step) {
+  for (let size = step; size < totalRows; size += step) {
     options.push(size);
   }
+  options.push(totalRows);
   return options;
 }
 
-/** Pick the initial page size: prefer showing what's loaded, capped by defaultPageSize. */
+/** Pick page size from loaded row count — use exact count when below step, else prefer default. */
 function resolveInitialPageSize(totalRows: number, preferredPageSize: number, step = PAGE_SIZE_STEP): number {
   if (totalRows <= 0) return preferredPageSize;
+
+  if (totalRows < step) return totalRows;
 
   const options = buildPageSizeOptions(totalRows, step);
   const target = Math.min(preferredPageSize, totalRows);
@@ -298,7 +298,7 @@ export function AppTable<TData>({
     const auto = buildPageSizeOptions(totalRows);
     if (!pageSizeOptions?.length) return auto;
 
-    const max = ceilToPageSizeStep(totalRows);
+    const max = totalRows > 0 ? totalRows : PAGE_SIZE_STEP;
     const merged = Array.from(
       new Set([...auto, ...pageSizeOptions.filter((size) => size <= max)]),
     ).sort((a, b) => a - b);

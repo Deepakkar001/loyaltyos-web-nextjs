@@ -5,6 +5,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 // Floating feature pills behind the dashboard card (disabled)
 // const FEATURES = [
@@ -198,9 +199,7 @@ export function HeroLoyaltyVisual() {
           <div className="p-5 md:p-6">
             <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-sm font-bold text-white">
-                  L
-                </span>
+                <Image src="/images/favicon.png" alt="LoyaltyOS" width={32} height={32} className="h-8 w-8 rounded-md" />
                 <div>
                   <p className="text-xs font-medium text-white/50">Programme dashboard</p>
                   <p className="text-sm font-semibold text-white">Summer Rewards 2026</p>

@@ -21,6 +21,20 @@ const MENU_TRANSITION = {
   ease: [0.32, 0.72, 0, 1] as const,
 };
 
+function periodOptionClassName(selected: boolean) {
+  return cn(
+    "flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm font-medium",
+    "transition-all duration-200 ease-out active:scale-[0.98]",
+    selected
+      ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/15"
+      : cn(
+          "text-foreground",
+          "hover:bg-[var(--accent-primary-soft)] hover:text-[var(--accent-primary)]",
+          "dark:hover:bg-white/[0.08] dark:hover:text-foreground",
+        ),
+  );
+}
+
 const MENU_WIDTH_PX = 272;
 const VIEWPORT_MARGIN_PX = 12;
 
@@ -174,12 +188,7 @@ export function DashboardPeriodDropdown({
                     type="button"
                     role="option"
                     aria-selected={selected}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
-                      selected
-                        ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
-                        : "text-foreground hover:bg-muted/70"
-                    )}
+                    className={periodOptionClassName(selected)}
                     onClick={() => handlePresetClick(option)}
                   >
                     <span>{PRESET_LABELS[option]}</span>
@@ -193,12 +202,7 @@ export function DashboardPeriodDropdown({
                 type="button"
                 role="option"
                 aria-selected={preset === "custom"}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
-                  preset === "custom" || customPanelOpen
-                    ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
-                    : "text-foreground hover:bg-muted/70"
-                )}
+                className={periodOptionClassName(preset === "custom" || customPanelOpen)}
                 onClick={handleCustomClick}
               >
                 <span>{PRESET_LABELS.custom}</span>

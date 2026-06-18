@@ -13,6 +13,20 @@ const MENU_TRANSITION = {
   ease: [0.32, 0.72, 0, 1] as const,
 };
 
+function dropdownOptionClassName(selected: boolean, compact = false) {
+  return cn(
+    "flex w-full cursor-pointer items-center justify-between transition-all duration-200 ease-out active:scale-[0.98] text-left whitespace-nowrap",
+    compact ? "gap-1 rounded-md px-2 py-1.5 text-sm font-semibold" : "gap-2 rounded-lg px-3 py-2 text-sm font-medium",
+    selected
+      ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/15"
+      : cn(
+          "text-foreground",
+          "hover:bg-[var(--accent-primary-soft)] hover:text-[var(--accent-primary)]",
+          "dark:hover:bg-white/[0.08] dark:hover:text-foreground",
+        ),
+  );
+}
+
 const VIEWPORT_MARGIN_PX = 12;
 
 export type AnimatedSelectOption = { value: string; label: string };
@@ -31,6 +45,8 @@ type AnimatedSelectProps = {
   className?: string;
   triggerClassName?: string;
   disabled?: boolean;
+  /** `filter` matches dashboard period/programme dropdown triggers. */
+  variant?: "default" | "filter";
 };
 
 function computeMenuPosition(root: HTMLElement, trigger: HTMLElement): MenuPosition {
@@ -51,6 +67,7 @@ export function AnimatedSelect({
   className,
   triggerClassName,
   disabled = false,
+  variant = "default",
 }: AnimatedSelectProps) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -143,12 +160,7 @@ export function AnimatedSelect({
                     type="button"
                     role="option"
                     aria-selected={selected}
-                    className={cn(
-                      "flex w-full items-center justify-between gap-1 rounded-md px-1.5 py-1 text-sm font-semibold tabular-nums transition-colors",
-                      selected
-                        ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
-                        : "text-foreground hover:bg-muted/70",
-                    )}
+                    className={dropdownOptionClassName(selected, variant === "default")}
                     onClick={() => {
                       onChange(option.value);
                       closeMenu();
@@ -182,12 +194,15 @@ export function AnimatedSelect({
         disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "h-9 w-full justify-between gap-1 rounded-lg border-input bg-background px-2.5 text-sm font-semibold shadow-sm",
+          "h-9 w-full max-w-full justify-between bg-background shadow-sm",
+          variant === "filter"
+            ? "gap-2 rounded-xl border-border/70 px-3 font-medium sm:w-auto sm:min-w-[11rem]"
+            : "gap-1 rounded-lg border-input px-2.5 text-sm font-semibold",
           open && "ring-2 ring-[var(--accent-primary)]/20",
           triggerClassName,
         )}
       >
-        <span className="tabular-nums">{selectedLabel}</span>
+        <span className="min-w-0 truncate">{selectedLabel}</span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
           transition={MENU_TRANSITION}

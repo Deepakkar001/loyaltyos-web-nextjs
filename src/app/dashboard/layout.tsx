@@ -34,6 +34,7 @@ import {
   LogOut,
   X,
 } from "lucide-react";
+import { Logo } from "@/components/common/logo";
 
 import { cn } from "@/lib/utils";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
@@ -550,17 +551,7 @@ function TenantDashboardLayoutInner({ children }: { children: React.ReactNode })
         (underReview || mustChangePassword) && "blur-sm pointer-events-none select-none"
       )}>
         <div className="px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/15">
-              <ShieldCheck className="h-5 w-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold tracking-tight truncate">LoyaltyOS</p>
-              <p className="text-[10px] font-medium uppercase tracking-widest truncate text-muted-foreground">
-                {companyName ?? "Tenant"}
-              </p>
-            </div>
-          </div>
+          <Logo />
         </div>
 
         <SidebarNav />

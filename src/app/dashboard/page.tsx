@@ -35,10 +35,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, RefreshCw, RotateCcw } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { DashboardSectionCard } from "@/components/tenant-dashboard/DashboardSectionCard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/native-select";
+import { AnimatedSelect } from "@/components/ui/animated-select";
 import { KpiCard } from "@/components/tenant-dashboard/KpiCard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -425,7 +425,7 @@ function DashboardHomeContent() {
     return (
       <div className="px-4 py-10 lg:px-8 space-y-4">
         <ModuleAccessDeniedBanner />
-        <Card className="bg-[var(--surface-card)] rounded-2xl p-8 shadow-[var(--shadow-card)] border-0 max-w-xl">
+        <DashboardSectionCard className="p-8 max-w-xl">
           <p className="text-lg font-bold">Unable to Load Dashboard</p>
           <p className="text-sm text-muted-foreground mt-2">{error}</p>
           <div className="mt-5 flex items-center gap-2">
@@ -442,7 +442,7 @@ function DashboardHomeContent() {
               Contact Support
             </Button>
           </div>
-        </Card>
+        </DashboardSectionCard>
       </div>
     );
   }
@@ -475,7 +475,7 @@ function DashboardHomeContent() {
           onClearCustomPeriod={clearCustomPeriod}
           periodLabel={periodMeta.label}
         />
-        <Card className="bg-[var(--surface-card)] rounded-2xl p-10 shadow-[var(--shadow-card)] border-0 max-w-2xl text-center">
+        <DashboardSectionCard className="p-10 max-w-2xl text-center">
           <p className="text-lg font-bold">No Data Yet</p>
           <p className="text-sm text-muted-foreground mt-2">
             Your programme has no ledger activity yet. Process events via integration to see live metrics.
@@ -486,7 +486,7 @@ function DashboardHomeContent() {
               Event schema
             </Button>
           </div>
-        </Card>
+        </DashboardSectionCard>
       </div>
     );
   }
@@ -532,7 +532,7 @@ function DashboardHomeContent() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Customize Dashboard Widgets</DialogTitle>
-            <DialogDescription>Drag sections to reorder. Uncheck to hide a widget.</DialogDescription>
+            <DialogDescription>Drag sections to reorder and uncheck to hide a widget.</DialogDescription>
           </DialogHeader>
           <WidgetCustomizeList
             widgetOrder={widgetOrder}
@@ -649,7 +649,7 @@ function DashboardHomeContent() {
                     transition={WIDGET_LAYOUT_TRANSITION}
                     className="grid grid-cols-1 xl:grid-cols-2 gap-4"
                   >
-                    <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
+                    <DashboardSectionCard>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="card-title text-foreground mb-1">Retention Rate</h3>
@@ -682,9 +682,9 @@ function DashboardHomeContent() {
                           };
                         })}
                       />
-                    </Card>
+                    </DashboardSectionCard>
 
-                    <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
+                    <DashboardSectionCard>
                       <h3 className="card-title text-foreground mb-1">Member Engagement</h3>
                       <p className="text-xs text-muted-foreground">
                         {overview.engagement.activePct.toFixed(1)}% active · {periodMeta.label}
@@ -733,7 +733,7 @@ function DashboardHomeContent() {
                           </span>
                         ))}
                       </div>
-                    </Card>
+                    </DashboardSectionCard>
                   </motion.section>,
                   <motion.section
                     key="health-volume"
@@ -745,7 +745,7 @@ function DashboardHomeContent() {
                     exit={{ opacity: 0, y: -8 }}
                     transition={WIDGET_LAYOUT_TRANSITION}
                   >
-                    <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0 xl:col-span-2">
+                    <DashboardSectionCard className="xl:col-span-2">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <h3 className="card-title text-foreground mb-1">Transaction volume</h3>
@@ -805,9 +805,9 @@ function DashboardHomeContent() {
                           </p>
                         )}
                       </div>
-                    </Card>
+                    </DashboardSectionCard>
 
-                    <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
+                    <DashboardSectionCard>
                       <h3 className="card-title text-foreground mb-1">Points Economics</h3>
                       <p className="text-xs text-muted-foreground mb-4">{periodMeta.label}</p>
                       <div className="space-y-3">
@@ -848,7 +848,7 @@ function DashboardHomeContent() {
                           </div>
                         </div>
                       </div>
-                    </Card>
+                    </DashboardSectionCard>
                   </motion.section>,
                 ];
               }
@@ -865,7 +865,7 @@ function DashboardHomeContent() {
                     exit={{ opacity: 0, y: -8 }}
                     transition={WIDGET_LAYOUT_TRANSITION}
                   >
-                    <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
+                    <DashboardSectionCard>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="card-title text-foreground mb-1">Rules & Redemptions</h3>
@@ -889,7 +889,7 @@ function DashboardHomeContent() {
                           <RedemptionsTable rows={overview.topRedemptions} periodLabel={periodMeta.label} />
                         </TabsContent>
                       </Tabs>
-                    </Card>
+                    </DashboardSectionCard>
                   </motion.section>,
                 ];
               }
@@ -954,7 +954,7 @@ function DashboardHomeContent() {
                       />
                     </div>
 
-                    <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
+                    <DashboardSectionCard>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="card-title text-foreground mb-1">Referral Analytics</h3>
@@ -980,7 +980,7 @@ function DashboardHomeContent() {
                           <ReferralTopReferrersTable rows={referralTopReferrers} />
                         </TabsContent>
                       </Tabs>
-                    </Card>
+                    </DashboardSectionCard>
                   </motion.section>,
                 ];
               }
@@ -996,7 +996,7 @@ function DashboardHomeContent() {
                     exit={{ opacity: 0, y: -8 }}
                     transition={WIDGET_LAYOUT_TRANSITION}
                   >
-                    <Card className="bg-[var(--surface-card)] rounded-2xl p-6 shadow-[var(--shadow-card)] border-0">
+                    <DashboardSectionCard>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="card-title text-foreground mb-1">Member Tier Distribution</h3>
@@ -1028,7 +1028,7 @@ function DashboardHomeContent() {
                           };
                         })}
                       />
-                    </Card>
+                    </DashboardSectionCard>
                   </motion.section>,
                 ];
               }
@@ -1242,10 +1242,10 @@ function DashboardHeader({
         {actionButtons}
       </div>
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0 max-w-xs shrink-0">
-          <NativeSelect
-            id="dashboard-programme"
+        <div className="relative w-full min-w-0 max-w-full sm:w-auto">
+          <AnimatedSelect
             ariaLabel="Programme"
+            variant="filter"
             value={programmeUid}
             disabled={programmesLoading || programmeOptions.length === 0}
             onChange={onProgrammeChange}

@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { Logo } from "@/components/common/logo";
+
 const links = [
   { href: "#timeline", label: "Timeline" },
   { href: "#differentiation", label: "Why us" },
@@ -18,11 +20,8 @@ export function MarketingNav() {
         aria-label="Primary"
         className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-3.5"
       >
-        <Link href="/" className="flex items-center gap-2 text-slate-900 font-semibold tracking-tight">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-white text-sm font-bold">
-            L
-          </span>
-          LoyaltyOS
+        <Link href="/" className="flex items-center text-slate-900">
+          <Logo size="lg" />
         </Link>
         <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-2 text-sm font-medium">
           {links.map((l) => (

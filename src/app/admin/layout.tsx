@@ -11,8 +11,8 @@ import {
   Headset,
   Layers,
   LogOut,
-  Shield,
 } from "lucide-react";
+import { Logo } from "@/components/common/logo";
 import { useAdminStore } from "@/lib/store/admin-store";
 import { cn } from "@/lib/utils";
 
@@ -60,15 +60,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed inset-y-0 left-0 z-30">
         {/* Logo */}
         <div className="px-6 py-5 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <Shield className="w-4.5 h-4.5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white tracking-tight">LoyaltyOS</p>
-              <p className="text-[10px] font-medium text-amber-400/80 uppercase tracking-widest">Admin</p>
-            </div>
-          </div>
+          <Logo size="md" className="bg-white p-4 rounded-md" />
         </div>
 
         {/* Navigation */}

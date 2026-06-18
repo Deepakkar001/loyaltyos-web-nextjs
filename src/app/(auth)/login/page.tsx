@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { Logo } from "@/components/common/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { onboardingApi, ApiError } from "@/lib/api/client";
@@ -107,13 +108,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-brand-950 flex items-center justify-center p-6 relative">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
-          <div className="flex items-center justify-center gap-2.5 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-brand-500 flex items-center justify-center">
-              <span className="text-white font-bold">L</span>
-            </div>
-            <span className="text-white font-semibold text-xl tracking-tight">
-              LoyaltyOS
-            </span>
+          <div className="mb-6 flex justify-center">
+            <Logo size="md" className="items-center justify-center bg-white p-2 rounded-xl" />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">
             Sign in to your portal

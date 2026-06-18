@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { ArrowRight, Eye, EyeOff, Lock, Mail, Shield } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/common/logo";
 import { adminApi, AdminApiError } from "@/lib/api/admin-client";
 import { useAdminStore } from "@/lib/store/admin-store";
 import toast from "react-hot-toast";
@@ -56,13 +57,8 @@ export default function AdminLoginPage() {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
-          <div className="flex items-center justify-center gap-2.5 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-white font-semibold text-xl tracking-tight">
-              LoyaltyOS Admin
-            </span>
+          <div className="mb-6 flex justify-center">
+            <Logo size="md" className="items-center bg-white p-2 rounded-xl" />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">
             Admin Portal
