@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
@@ -14,7 +15,21 @@ import { mergeProgrammeDropdownRows } from "@/lib/programme/programme-config-hel
 import type { EarnRuleDetailResponse, RuleStatus } from "@/types/rules";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { clearSandboxGate, getSandboxGate } from "@/lib/store/rule-sandbox-gate";
-import { RuleConditionFlowPreview } from "@/components/loyalty-rules/condition-flow/RuleConditionFlowPreview";
+
+const RuleConditionFlowPreview = dynamic(
+  () =>
+    import("@/components/loyalty-rules/condition-flow/RuleConditionFlowPreview").then(
+      (mod) => mod.RuleConditionFlowPreview
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+        Loading condition diagram…
+      </div>
+    ),
+  }
+);
 
 export default function RuleDetailsPage() {
   const router = useRouter();

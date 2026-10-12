@@ -5,10 +5,17 @@ import { Toaster } from "react-hot-toast";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ThemeProvider } from "next-themes";
-const ReactQueryDevtools = dynamic(
-  () => import("@tanstack/react-query-devtools").then((mod) => mod.ReactQueryDevtools),
-  { ssr: false }
-);
+
+const ReactQueryDevtools =
+  process.env.NODE_ENV === "development"
+    ? dynamic(
+        () =>
+          import("@tanstack/react-query-devtools").then(
+            (mod) => mod.ReactQueryDevtools
+          ),
+        { ssr: false }
+      )
+    : () => null;
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

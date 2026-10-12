@@ -6,7 +6,7 @@ export function getApiBaseUrl(): string | undefined {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw) return raw.replace(/\/$/, "");
   if (process.env.NODE_ENV === "development") {
-    return "http://localhost:8081";
+    return "http://localhost:8081/api/los";
   }
   return undefined;
 }

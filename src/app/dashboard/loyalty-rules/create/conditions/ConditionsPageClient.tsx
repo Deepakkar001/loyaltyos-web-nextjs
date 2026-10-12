@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
@@ -13,10 +14,25 @@ import { fromBackendConditionTree } from "@/components/loyalty-rules/condition-b
 import { toBackendConditionTree, type ConditionNode, type ConditionGroup, type ConditionTreeDraft } from "@/components/loyalty-rules/condition-builder/types";
 import { ConditionFieldCatalogProvider } from "@/components/loyalty-rules/condition-field-catalog-context";
 import { useConditionFieldCatalog as useLoadedConditionFieldCatalog } from "@/lib/rules/use-condition-field-catalog";
-import { RuleFlowBuilder, type RuleFlowBuilderHandle } from "@/components/loyalty-rules/condition-flow/RuleFlowBuilder";
+import type { RuleFlowBuilderHandle } from "@/components/loyalty-rules/condition-flow/RuleFlowBuilder";
 import { useOnboardingStore } from "@/lib/store/onboarding-store";
 import { loadRuleDraft, saveRuleDraftFields } from "@/lib/store/rule-draft-storage";
 import { stepHref, useRuleCreateFlow } from "../_components/rule-create-flow";
+
+const RuleFlowBuilder = dynamic(
+  () =>
+    import("@/components/loyalty-rules/condition-flow/RuleFlowBuilder").then(
+      (mod) => mod.RuleFlowBuilder
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[420px] items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+        Loading diagram editor…
+      </div>
+    ),
+  }
+);
 
 // ── Deep tree validation helpers ─────────────────────────────────────────────
 

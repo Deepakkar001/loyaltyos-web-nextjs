@@ -104,11 +104,13 @@ async function refreshSingleFlight(): Promise<LoginResponse> {
       "/api/v1/auth/refresh",
       {},
       {
-        // 401 is normal when not logged in — avoid treating it as an axios transport error.
-        validateStatus: (status) => status === 200 || status === 401,
+        // Never attach a stale Bearer token — it can make Spring reject this permitAll route.
+        skipAuth: true,
+        // 401 = no/expired refresh cookie. Some proxies map that to 403.
+        validateStatus: (status) => status === 200 || status === 401 || status === 403,
       }
     );
-    if (res.status === 401) {
+    if (res.status === 401 || res.status === 403) {
       throw new AuthSessionRequiredError();
     }
     return res.data;
